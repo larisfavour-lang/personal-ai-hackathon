@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>普通页面 · 选购说明与常见问题（测试数据）</title>
+<meta name="description" content="不带任何扩展标记的普通网页，用来验证读取页面内容时不把表单里已填的值一起读走。">
+<link rel="stylesheet" href="shop.css">
+</head>
+<body>
+<main class="plain">
+  <header class="plain-head">
+    <span class="shop-tag">普通网页 · 测试数据，不是真实电商</span>
+    <h1>儿童运动鞋选购说明</h1>
+    <p class="plain-sub">这一页没有任何扩展标记，用来验证「读这一页」在普通网页上也成立。</p>
+  </header>
+
+  <section class="plain-body">
+    <h2>怎么选尺码</h2>
+    <p>先量孩子现在穿的鞋垫长度，再对照尺码表选。脚长得快，可以适当选大半个码。</p>
+    <p>这一页是纯文字说明，插件只能读到上面这些看得见的文字。</p>
+
+    <h2>常见问题</h2>
+    <ul>
+      <li>支持七天无理由退换，运费由商家承担。</li>
+      <li>发货时间以订单页面显示为准。</li>
+    </ul>
+
+    <div class="plain-hidden" style="display:none">
+      隐藏文字不应出现在读取结果里。
+    </div>
+
+    <h2>留言表单（测试数据）</h2>
+    <form class="plain-form" onsubmit="return false">
+      <label class="shop-field">
+        <span>联系电话</span>
+        <input id="plain-phone" type="tel" value="13800000000">
+      </label>
+      <label class="shop-field">
+        <span>收货地址</span>
+        <textarea id="plain-addr" rows="2">上海市徐汇区示例路 1 号 302 室（虚构）</textarea>
+      </label>
+      <label class="shop-field">
+        <span>鞋码</span>
+        <select id="plain-size">
+          <option value="">请选择</option>
+          <option value="30 码" selected>30 码</option>
+          <option value="99 码">99 码</option>
+        </select>
+      </label>
+      <label class="shop-field">
+        <span>登录密码</span>
+        <input id="plain-pwd" type="password" value="secret123">
+      </label>
+      <button type="submit" id="plain-submit">提交留言（模拟）</button>
+    </form>
+    <p class="shop-fine">上面这些输入框里的内容是访问者自己填的，不属于页面内容，读取时一律排除。</p>
+  </section>
+</main>
+</body>
+</html>

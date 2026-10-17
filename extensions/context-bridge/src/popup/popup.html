@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>随身助手</title>
+<link rel="stylesheet" href="popup.css">
+</head>
+<body>
+<main id="app">
+  <header class="cb-head">
+    <h1>随身助手</h1>
+    <p class="cb-sub" id="who">未连接</p>
+  </header>
+
+  <section id="view-pair" class="cb-view">
+    <p class="cb-hint">连接一次就能一直用：重开浏览器、换页面都保持着，
+      不用每次重新配对。只有在个人助理里撤销了这个设备，才需要再连一次。</p>
+    <label class="cb-field">
+      <span>配对码</span>
+      <input id="pair-code" type="text" autocomplete="off" placeholder="例如 8F3K-2QD1">
+    </label>
+    <label class="cb-field">
+      <span>设备名称</span>
+      <input id="pair-name" type="text" autocomplete="off" placeholder="我的电脑 Chrome">
+    </label>
+    <button id="btn-pair" class="cb-btn cb-btn-primary">连接</button>
+  </section>
+
+  <section id="view-tasks" class="cb-view" hidden>
+    <p class="cb-hint">选一个本人事项：点标题看这次的需求，能代填的页面再点「去代填」。</p>
+    <ul id="task-list" class="cb-tasks"></ul>
+    <button id="btn-revoke" class="cb-btn cb-btn-quiet">断开这个设备</button>
+  </section>
+
+  <section id="view-context" class="cb-view" hidden>
+    <p class="cb-hint">同一件事换页面继续办：预算、用途、偏好、排除项和还没定的条件，
+      都可以从这里复制到别的页面用，不用重新交代一遍。</p>
+    <div class="cb-card">
+      <div class="cb-row"><span class="cb-k">事项</span><span class="cb-v" id="cx-title"></span></div>
+      <div class="cb-row"><span class="cb-k">对象</span><span class="cb-v" id="cx-subject"></span></div>
+      <div class="cb-row"><span class="cb-k">状态</span><span class="cb-v" id="cx-status"></span></div>
+    </div>
+    <div id="cx-summary" class="cb-note"></div>
+    <h2 class="cb-h">这次的需求</h2>
+    <table class="cb-fields">
+      <thead><tr><th>项目</th><th>内容</th><th>来源</th></tr></thead>
+      <tbody id="cx-reqs"></tbody>
+    </table>
+    <div id="cx-pending" class="cb-warn" hidden></div>
+    <div class="cb-copy">
+      <button id="btn-copy-terms" class="cb-btn cb-btn-primary">复制搜索词</button>
+      <button id="btn-copy-export" class="cb-btn cb-btn-quiet">复制这次需求</button>
+    </div>
+    <div id="cx-diff" class="cb-warn" hidden></div>
+    <div id="cx-terms-box" class="cb-note" hidden></div>
+    <div id="cx-export-box" class="cb-note" hidden></div>
+    <p class="cb-fine">复制由你主动点击。插件不会自动往任何网页、客服或别人的助手发消息。
+      执行代填仍要重新预览并确认。</p>
+    <button id="btn-context-back" class="cb-btn cb-btn-quiet">返回</button>
+  </section>
+
+  <section id="view-read" class="cb-view" hidden>
+    <p class="cb-hint">读当前这一页的文字，带回去接着用。只读页面自己显示的内容，
+      不读你在输入框里填过的值，也不改页面任何东西。</p>
+    <div class="cb-card">
+      <div class="cb-row"><span class="cb-k">页面</span><span class="cb-v" id="rd-title"></span></div>
+      <div class="cb-row"><span class="cb-k">地址</span><span class="cb-v" id="rd-url"></span></div>
+    </div>
+    <h2 class="cb-h">这一页的内容</h2>
+    <div id="rd-text" class="cb-read"></div>
+    <div id="rd-note" class="cb-note" hidden></div>
+    <div class="cb-copy">
+      <button id="btn-read-copy" class="cb-btn cb-btn-quiet">复制这一页内容</button>
+      <button id="btn-read-refresh" class="cb-btn cb-btn-quiet">重新读一次</button>
+    </div>
+    <p class="cb-fine">读取范围只看得到的正文、标题、表格和控件说明；输入框里
+      已经填的值和密码一律不读。内容只在你自己点复制时才进剪贴板。</p>
+    <button id="btn-read-back" class="cb-btn cb-btn-quiet">返回</button>
+  </section>
+
+  <section id="view-preview" class="cb-view" hidden>
+    <div class="cb-card">
+      <div class="cb-row"><span class="cb-k">事项</span><span class="cb-v" id="pv-title"></span></div>
+      <div class="cb-row"><span class="cb-k">对象</span><span class="cb-v" id="pv-subject"></span></div>
+      <div class="cb-row"><span class="cb-k">商品</span><span class="cb-v" id="pv-product"></span></div>
+      <div class="cb-row"><span class="cb-k">约定版本</span><span class="cb-v" id="pv-version"></span></div>
+    </div>
+    <h2 class="cb-h">要填到页面的参数</h2>
+    <table class="cb-fields">
+      <thead><tr><th>字段</th><th>值</th><th>来源</th></tr></thead>
+      <tbody id="pv-fields"></tbody>
+    </table>
+    <div id="pv-missing" class="cb-warn" hidden></div>
+    <div id="pv-page" class="cb-note"></div>
+    <button id="btn-fill" class="cb-btn cb-btn-primary">确认并代填</button>
+    <button id="btn-back" class="cb-btn cb-btn-quiet">返回换一件事</button>
+    <p class="cb-fine">代填只把参数写进页面，不提交订单、不付款。</p>
+  </section>
+
+  <section id="view-result" class="cb-view" hidden>
+    <div id="rs-banner" class="cb-banner"></div>
+    <table class="cb-fields">
+      <thead><tr><th>字段</th><th>页面实际值</th><th>结果</th></tr></thead>
+      <tbody id="rs-fields"></tbody>
+    </table>
+    <div id="rs-receipt" class="cb-note"></div>
+    <button id="btn-retry-receipt" class="cb-btn cb-btn-primary">重新核对并发送回执</button>
+    <button id="btn-done" class="cb-btn cb-btn-quiet">完成</button>
+  </section>
+
+  <p id="error" class="cb-error" hidden></p>
+</main>
+<script src="../lib/contract.js"></script>
+<script src="../lib/config.js"></script>
+<script src="../lib/clipboard.js"></script>
+<script src="popup.js"></script>
+</body>
+</html>

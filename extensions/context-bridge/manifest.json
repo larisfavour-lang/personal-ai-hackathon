@@ -1,0 +1,56 @@
+{
+  "manifest_version": 3,
+  "name": "随身助手（个人助理浏览器助手）",
+  "version": "0.1.0",
+  "description": "接着办个人助理里的事：换页面不用重说预算、用途和偏好，可复制需求继续挑；支持的页面也能代填参数并回读核对，还能读一页内容带回去。不提交订单、不付款。",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "http://127.0.0.1:8000/*",
+    "http://localhost:8000/*",
+    "http://127.0.0.1:8097/*",
+    "http://localhost:8097/*",
+    "http://127.0.0.1:9000/*",
+    "http://localhost:9000/*",
+    "http://127.0.0.1:8098/*",
+    "http://localhost:8098/*"
+  ],
+  "background": {
+    "service_worker": "src/background/service-worker.js"
+  },
+  "action": {
+    "default_popup": "src/popup/popup.html",
+    "default_title": "随身助手"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://127.0.0.1:8097/*",
+        "http://localhost:8097/*",
+        "http://127.0.0.1:9000/*",
+        "http://localhost:9000/*"
+      ],
+      "js": [
+        "src/lib/contract.js",
+        "src/content/shop-adapter.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "http://127.0.0.1:8097/*",
+        "http://localhost:8097/*",
+        "http://127.0.0.1:9000/*",
+        "http://localhost:9000/*"
+      ],
+      "js": [
+        "src/content/page-reader.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ]
+}

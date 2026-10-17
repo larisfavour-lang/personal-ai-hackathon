@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">我的小助手：记下并办妥</title>
+  <desc id="desc">原创几何对话形与勾线；浅纸色背景、低饱和灰绿主体，无字体或外部素材。</desc>
+  <!-- Original geometry drawn for this project, 2026-10-16. MIT for owned code/assets only.
+       Hallmark direction: calm utility, paper neutral, muted green ink; no gradient or decorative detail. -->
+  <rect id="paper" x="0" y="0" width="512" height="512" fill="#f7f6f3"/>
+  <path id="conversation" fill="#34463f" d="M 184 136 L 328 136 C 358.9 136 384 161.1 384 192 L 384 288 C 384 318.9 358.9 344 328 344 L 222 344 L 164 382 L 164 336 C 142.5 328 128 309.5 128 288 L 128 192 C 128 161.1 153.1 136 184 136 Z"/>
+  <path id="done" fill="none" stroke="#f7f6f3" stroke-width="26" stroke-linecap="round" stroke-linejoin="round" d="M 208 238 L 244 274 L 305 211"/>
+</svg>

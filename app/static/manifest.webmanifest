@@ -1,0 +1,17 @@
+{
+  "name": "我的小助手",
+  "short_name": "小助手",
+  "description": "记住我和身边人的情况，需要时替我协商办事。本地演示版。",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f7f6f3",
+  "theme_color": "#f7f6f3",
+  "lang": "zh-CN",
+  "icons": [
+    {"src": "/static/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+    {"src": "/static/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+    {"src": "/static/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ]
+}

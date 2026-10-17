@@ -1,0 +1,114 @@
+:root {
+  --ink: #1c1f24;
+  --ink-soft: #5b6472;
+  --line: #dfe3ea;
+  --bg: #ffffff;
+  --accent: #1d5fd0;
+  --warn-bg: #fff6e5;
+  --warn-line: #e6b25a;
+  --err: #b3261e;
+  --ok: #146c43;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  width: 360px;
+  font: 14px/1.5 -apple-system, "PingFang SC", "Helvetica Neue", sans-serif;
+  color: var(--ink);
+  background: var(--bg);
+}
+.cb-head { padding: 14px 16px 10px; border-bottom: 1px solid var(--line); }
+.cb-head h1 { margin: 0; font-size: 15px; font-weight: 600; }
+.cb-sub { margin: 2px 0 0; font-size: 12px; color: var(--ink-soft); }
+.cb-view { padding: 14px 16px 18px; }
+.cb-hint { margin: 0 0 12px; font-size: 12px; color: var(--ink-soft); }
+.cb-h { margin: 14px 0 6px; font-size: 13px; font-weight: 600; }
+.cb-field { display: block; margin-bottom: 10px; }
+.cb-field span { display: block; font-size: 12px; color: var(--ink-soft); margin-bottom: 4px; }
+.cb-field input {
+  width: 100%; padding: 8px 10px; font-size: 14px;
+  border: 1px solid var(--line); border-radius: 6px;
+}
+.cb-btn {
+  display: block; width: 100%; padding: 9px 12px; margin-top: 8px;
+  font-size: 14px; border: 1px solid var(--line); border-radius: 6px;
+  background: #fff; color: var(--ink); cursor: pointer;
+}
+.cb-btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.cb-btn-quiet { color: var(--ink-soft); }
+.cb-btn:disabled { opacity: .5; cursor: default; }
+.cb-tasks { list-style: none; margin: 0 0 8px; padding: 0; }
+.cb-tasks li {
+  padding: 10px 12px; margin-bottom: 8px;
+  border: 1px solid var(--line); border-radius: 8px; cursor: pointer;
+}
+.cb-tasks li:hover { border-color: var(--accent); }
+.cb-tasks li.is-blocked { opacity: .6; cursor: default; }
+.cb-task-title { font-weight: 600; }
+.cb-task-status { font-size: 12px; color: var(--ink-soft); margin-top: 2px; }
+.cb-task-why { font-size: 12px; color: var(--err); margin-top: 2px; }
+.cb-card { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+.cb-row { display: flex; gap: 10px; font-size: 13px; padding: 3px 0; }
+.cb-k { flex: 0 0 64px; color: var(--ink-soft); }
+.cb-v { flex: 1; }
+.cb-fields { width: 100%; border-collapse: collapse; font-size: 13px; }
+.cb-fields th, .cb-fields td {
+  text-align: left; padding: 6px 4px; border-bottom: 1px solid var(--line);
+}
+.cb-fields th { color: var(--ink-soft); font-weight: 500; font-size: 12px; }
+.cb-fields td.cb-bad { color: var(--err); }
+.cb-fields td.cb-good { color: var(--ok); }
+.cb-src { font-size: 12px; color: var(--ink-soft); }
+.cb-warn {
+  margin-top: 10px; padding: 8px 10px; font-size: 12px;
+  background: var(--warn-bg); border: 1px solid var(--warn-line); border-radius: 6px;
+}
+.cb-note { margin-top: 10px; font-size: 12px; color: var(--ink-soft); }
+.cb-fine { margin: 10px 0 0; font-size: 11px; color: var(--ink-soft); }
+.cb-banner { padding: 8px 10px; border-radius: 6px; font-size: 13px; margin-bottom: 10px; }
+.cb-banner.is-ok { background: #eaf5ee; color: var(--ok); border: 1px solid #a8d5bd; }
+.cb-banner.is-part { background: var(--warn-bg); color: #8a5a00; border: 1px solid var(--warn-line); }
+.cb-banner.is-bad { background: #fdecea; color: var(--err); border: 1px solid #f0b4ae; }
+.cb-error {
+  margin: 0 16px 14px; padding: 8px 10px; font-size: 12px;
+  background: #fdecea; color: var(--err); border: 1px solid #f0b4ae; border-radius: 6px;
+}
+
+/* 需求卡：待确认的取值用弱色显示，和已知需求分开——把还没定的事
+   画成确定规格，用户会拿它去下单。 */
+td.cb-pending { color: var(--warn-line); font-style: italic; }
+
+/* 事项行内的「去代填」：需求卡是默认动作，代填是进阶动作，
+   所以按钮靠右、不占整行。 */
+.cb-task-go {
+  float: right; padding: 3px 10px; margin-top: -2px;
+  font-size: 12px; border: 1px solid var(--accent); border-radius: 6px;
+  background: #fff; color: var(--accent); cursor: pointer;
+}
+.cb-task-go:hover { background: var(--accent); color: #fff; }
+
+/* 复制区：主按钮给搜索词（最常用），需求说明次之。 */
+.cb-copy { margin-top: 12px; }
+
+/* 读这一页：正文与说明分开。控件说明（「联系电话：30 码、31 码」）
+   是页面写的文字，和正文同一档即可；这里只把整块做成可滚动的预览区，
+   页面长的时候不会把按钮顶出视野。 */
+.cb-read {
+  max-height: 240px; overflow-y: auto; margin-top: 10px;
+  padding: 8px 10px; font-size: 13px; line-height: 1.6;
+  border: 1px solid var(--line); border-radius: 6px;
+}
+.cb-read p { margin: 0 0 6px; }
+.cb-read p:last-child { margin-bottom: 0; }
+.cb-read-label { color: var(--ink-soft); font-size: 12px; }
+.cb-read-body { white-space: pre-wrap; }
+
+/* 事项行里「读这一页」：与「去代填」同款次要按钮，但用自己的类名——
+   两个动作语义不同，共用一个类会让定位「去代填」的地方点错按钮。
+   读页面是多数页面都能用的动作，所以排在代填左边。 */
+.cb-task-read {
+  float: right; padding: 3px 10px; margin-top: -2px; margin-right: 6px;
+  font-size: 12px; border: 1px solid var(--line); border-radius: 6px;
+  background: #fff; color: var(--ink-soft); cursor: pointer;
+}
+.cb-task-read:hover { border-color: var(--accent); color: var(--accent); }

@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f7f6f3">
+<link rel="manifest" href="/static/manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png">
+<meta name="apple-mobile-web-app-title" content="小应用">
+<title>小应用 · 记录与下一步</title>
+<style>
+:root{
+  --paper: oklch(97.5% 0.008 85);
+  --paper-2: oklch(99% 0.004 90);
+  --surface: oklch(100% 0 0);
+  --ink: oklch(24% 0.012 75);
+  --ink-2: oklch(42% 0.014 75);
+  --ink-3: oklch(58% 0.012 75);
+  --line: oklch(90% 0.008 85);
+  --line-2: oklch(86% 0.01 82);
+  --accent: oklch(46% 0.075 155);
+  --accent-soft: oklch(94% 0.03 155);
+  --bad: oklch(48% 0.13 25);
+  --bad-soft: oklch(95% 0.04 25);
+  --radius: 14px; --radius-s: 10px;
+  --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-5: 20px; --space-6: 28px;
+  --font-body: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB",
+    "Noto Sans CJK SC", "Microsoft YaHei", sans-serif;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--font-body);
+  font-size:15px;line-height:1.6;-webkit-font-smoothing:antialiased}
+.wrap{max-width:560px;margin:0 auto;padding:var(--space-5) var(--space-4) 56px}
+header{display:flex;align-items:baseline;gap:10px;margin-bottom:4px}
+header h1{font-size:19px;margin:0;font-weight:600}
+header .back{margin-left:auto;font-size:13px;color:var(--ink-2);text-decoration:none}
+.sub{color:var(--ink-3);font-size:13px;margin:0 0 var(--space-5)}
+.tabs{display:flex;gap:8px;margin-bottom:var(--space-5);flex-wrap:wrap}
+.tab{border:1px solid var(--line-2);background:var(--surface);border-radius:999px;
+  padding:7px 14px;font-size:13.5px;color:var(--ink-2);cursor:pointer;font-family:inherit}
+.tab[aria-selected="true"]{background:var(--accent-soft);border-color:var(--accent);
+  color:var(--ink);font-weight:500}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+  padding:var(--space-4);margin-bottom:var(--space-3)}
+.card h3{margin:0 0 2px;font-size:15px;font-weight:600}
+.card .meta{color:var(--ink-3);font-size:12.5px;margin-bottom:10px}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:14px;margin:0}
+.kv dt{color:var(--ink-3)}
+.kv dd{margin:0}
+.pill{display:inline-block;font-size:12px;padding:2px 9px;border-radius:999px;
+  background:var(--accent-soft);color:var(--ink);margin-right:6px}
+.pill.device{background:oklch(94% 0.03 250)}
+.pill.private{background:var(--bad-soft);color:var(--bad)}
+.pill.old{background:oklch(93% 0.01 80);color:var(--ink-3)}
+.notice{margin-top:10px;padding:10px 12px;border-radius:var(--radius-s);
+  background:var(--paper-2);border:1px solid var(--line);font-size:13px;color:var(--ink-2)}
+.notice.bad{background:var(--bad-soft);border-color:var(--bad);color:var(--bad)}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;align-items:center}
+.btn{border:1px solid var(--line-2);background:var(--surface);border-radius:var(--radius-s);
+  padding:8px 14px;font-size:13.5px;color:var(--ink);cursor:pointer;font-family:inherit}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn:disabled{opacity:.55;cursor:default}
+.chip{border:1px solid var(--line-2);background:var(--surface);border-radius:999px;
+  padding:6px 13px;font-size:13px;color:var(--ink-2);cursor:pointer;font-family:inherit}
+.chip[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent);color:var(--ink)}
+textarea,input[type=text]{width:100%;border:1px solid var(--line-2);border-radius:var(--radius-s);
+  padding:8px 10px;font-family:inherit;font-size:13.5px;background:var(--surface);color:var(--ink)}
+textarea{resize:vertical;min-height:60px}
+label{display:block;font-size:12.5px;color:var(--ink-3);margin:10px 0 4px}
+.state{font-size:12.5px;color:var(--ink-3);margin-top:6px}
+.empty{color:var(--ink-3);font-size:13.5px;padding:18px 0}
+.sources{margin-top:10px;border-top:1px dashed var(--line);padding-top:10px}
+.sources h4{margin:0 0 6px;font-size:13px;font-weight:600;color:var(--ink-2)}
+.sources .s{font-size:12.5px;color:var(--ink-2);margin-bottom:3px}
+.big{font-size:14.5px;margin:6px 0 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>小应用</h1>
+    <a class="back" href="/">返回对话</a>
+  </header>
+  <p class="sub">两个各自独立的小应用。学习软件负责记进度，周末安排根据已授权的进度
+    给下一步建议，并说明依据来自哪一条。</p>
+
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" data-view="study" aria-selected="true">学习软件</button>
+    <button class="tab" role="tab" data-view="plan" aria-selected="false">周末安排</button>
+  </div>
+
+  <div id="flash" class="state" role="status" aria-live="polite"
+       style="min-height:20px;margin-bottom:12px"></div>
+  <div id="out"></div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
+  ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+let view = "study";
+let myPersons = [];
+let picked = "";
+
+/* 反馈写在 #out 外面的固定元素里。写在列表内部的话，
+   一重渲染就连同反馈一起被替换掉，用户刚点完保存就什么也看不到。 */
+function flash(text, bad){
+  const el = $("flash");
+  if(!el) return;
+  el.textContent = text || "";
+  el.style.color = bad ? "var(--bad)" : "var(--ink-3)";
+}
+
+async function api(path, opts){
+  const r = await fetch(path, opts);
+  const data = await r.json().catch(() => ({}));
+  if(!r.ok){
+    // 普通接口用 detail，插件接口用 {error:{...}}。两处都取，谁有内容用谁，
+    // 否则服务端给的具体原因会被显示成 [object Object]。
+    const fromError = data && data.error && data.error.message;
+    throw new Error(fromError || data.detail || ("HTTP " + r.status));
+  }
+  return data;
+}
+const post = (p, b) => api(p, {method:"POST", headers:{"Content-Type":"application/json"},
+  body: JSON.stringify(b)});
+
+/* 可选对象直接取服务端按本人过滤后的列表。这里不再按 owner_id 二次过滤：
+   那个字段 /api/persons 并不返回，按它筛会得到空列表；
+   归属本来就该由服务端决定，前端再筛一遍只会两头维护。 */
+async function loadPersons(){
+  const d = await api("/api/persons");
+  myPersons = d.persons || [];
+  if(!picked && myPersons.length) picked = myPersons[0].person_id;
+}
+
+// 把页面里的脚本错误暴露出来。没有这个捕获器时，验收脚本读到的
+// window.__paErr 永远是空串，看起来「没有错误」，其实从没在听。
+window.__paErr = "";
+window.addEventListener("error", (e) => {
+  window.__paErr += "[error] " + (e.message || "") + " @"
+    + (e.filename || "") + ":" + (e.lineno || 0) + "\n";
+});
+window.addEventListener("unhandledrejection", (e) => {
+  const r = e.reason;
+  window.__paErr += "[unhandled] " + ((r && r.message) ? r.message : String(r)) + "\n";
+});
+
+async function boot(){
+  await loadPersons();
+  await render();
+}
+boot();
+
+// 模型给的把握度是 high/medium/low。普通用户看到英文没有意义，
+// 只显示中文；原值留在服务端日志和接口返回值里，需要核对时查那里。
+const CONF_TEXT = {high: "依据充分", medium: "依据一般", low: "依据不足"};
+function confText(c){
+  return CONF_TEXT[c] || "";
+}
+
+// 来源标识翻成人话。source 是内部 ID（study_app、photo_一串字符），
+// event_type 也是内部类型名。普通人看到这些看不出这条记录是谁记的、
+// 在什么情况下记的。provider 缺失时才退回这里翻一层，翻不出就给中性说法，
+// 不把内部编号直接摊给用户看。
+const SOURCE_TEXT = {
+  study_app: "学习软件里记的",
+  mom_diary: "家长日记里记的",
+  watch_sync: "手表同步的",
+};
+const EVENT_TEXT = {
+  study_progress: "学习进度",
+  photo_record: "拍照记录",
+  note: "近况记录",
+};
+function sourceText(source, eventType){
+  if(SOURCE_TEXT[source]) return SOURCE_TEXT[source];
+  // photo_ 开头是拍照来的，带上事件类型说清是什么记录。
+  if(String(source || "").indexOf("photo_") === 0) return "拍照记录";
+  return EVENT_TEXT[eventType] || "已授权的记录";
+}
+
+function personChips(){
+  if(!myPersons.length){
+    return '<div class="notice">还没有可记录的人物。</div>';
+  }
+  let h = '<div class="row">';
+  for(const p of myPersons){
+    h += '<button class="chip" data-pick="' + esc(p.person_id) + '" aria-pressed="'
+       + (p.person_id === picked) + '">' + esc(p.name) + '</button>';
+  }
+  h += '</div>';
+  return h;
+}
+
+/* ---------- 建议被「两个值对不上」挡下时的处理 ---------- */
+// 服务端在 status=needs_confirm 时返回 conflicts：每一项是哪条记录、
+// 哪个字段和本人后来写的正文对不上。这里要把它说成具体的一件事，
+// 再给一条真的能走通的路，不是只摆一句「数据有冲突」。
+//
+// 纠正走已有的 /correct：它把旧记录标成被替代，写入新内容，
+// 授权跟着新记录走。前端只需要把那个字段的新值发过去。
+// 只有本人记的记录才能更正（服务端按 owner_id 校验），
+// 别人记的这里不摆按钮，改成说清去哪看。
+function renderConflict(box, d){
+  const items = d.conflicts || [];
+  let h = '<div class="notice bad">' + esc(d.note || "记录里有两个对不上的值，先定用哪个。") + '</div>';
+  if(items.length){
+    h += '<div class="sources"><h4>对不上的地方</h4>';
+    for(const c of items){
+      const who = c.source || "一条记录";
+      const when = c.happened_on ? " · " + esc(c.happened_on) : "";
+      h += '<div class="s">' + esc(who) + when + " 的「" + esc(c.field || "内容")
+         + "」和你后来写的正文不是一个数。</div>";
+    }
+    h += '</div>';
+  }
+  // 就地定一个数。输入框预填当前字段值，用户改完保存即可，
+  // 不用先看懂「哪个字段」这种内部说法。
+  // 只对本人记的记录摆这个表单：服务端按 owner_id 校验，
+  // 别人记的记录这里摆出去只会点出 404，不如说清去哪看。
+  const fixable = items.filter((c) => c.event_id);
+  if(fixable.length){
+    const c = fixable[0];
+    // 预填当前字段值：用户是来改一个数的，不是来重打整句话的。
+    // 值从 sources 里按 event_id 找——那是本人能看到的那一条记录。
+    const src = (d.sources || []).find((s) => s.event_id === c.event_id);
+    const old = (src && src.fields && src.fields[c.field]) || "";
+    h += '<label for="ta-fix">把「' + esc(c.field || "内容") + "」改成</label>"
+       + '<textarea id="ta-fix" placeholder="写定下来的那个数，例如：四十分钟">'
+       + esc(old) + '</textarea>'
+       + '<div class="row"><button class="btn primary" id="btn-fix">定这个，再给建议</button>'
+       + '</div>';
+  }else{
+    h += '<div class="state">这条不是你记的，改不了。可以在「学习软件」页'
+       + '找到记这条的人，让对方改。</div>';
+  }
+  // 说清改完会怎样：旧的那条标为已更正，下次读到的是新值。
+  h += '<div class="state">定一个数，我用它来给建议。改的是记录里的那个字段，'
+     + '改完旧的那条标为已更正，下次读到的是新值。</div>';
+  box.innerHTML = h;
+  const btn = $("btn-fix");
+  if(btn){
+    btn.addEventListener("click", async () => {
+      const text = ($("ta-fix").value || "").trim();
+      if(!text){ flash("先写定下来的那个数。", true); return; }
+      const c = fixable[0];
+      flash("正在保存…");
+      try{
+        // correct 的 payload 是整份替换，不是合并：只想改一个字段时，
+        // 也要把这条记录其余要保留的字段一起写进来，否则会被抹掉。
+        const keep = {};
+        const src = (d.sources || []).find((s) => s.event_id === c.event_id);
+        if(src && src.fields){
+          for(const k in src.fields){
+            if(k !== c.field) keep[k] = src.fields[k];
+          }
+        }
+        keep[c.field] = text;
+        await post("/api/life-events/" + encodeURIComponent(c.event_id) + "/correct",
+                   {payload: keep});
+        flash("已定。旧记录标为已更正，正在按新值给建议…");
+        // 改完立刻重取一次建议，不让用户自己再点一次「给一条建议」。
+        const again = await post("/api/suggestion", {subject_id: picked});
+        if(again.status === "needs_confirm"){
+          renderConflict(box, again);
+          flash("还有一处对不上，接着定。", true);
+          return;
+        }
+        box.innerHTML = '<div class="big">' + esc(again.suggestion) + '</div>';
+      }catch(err){
+        flash("没改成：" + err.message, true);
+      }
+    });
+  }
+}
+
+/* ---------- 视图一：学习软件 ---------- */
+async function renderStudy(){
+  const out = $("out");
+  if(!picked){
+    out.innerHTML = '<div class="empty">先选一个对象。</div>';
+    return;
+  }
+  out.innerHTML = '<div class="empty">正在读…</div>';
+  let evs = [];
+  try{
+    const d = await api("/api/source/study_app");
+    evs = (d.events || []).filter((e) => e.subject_id === picked);
+  }catch(err){
+    out.innerHTML = '<div class="empty">没读到记录：' + esc(err.message) + '</div>';
+    return;
+  }
+  let h = '<div class="card"><h3>记一条进度</h3>'
+    + '<div class="meta">选对象，再写今天做了什么。保存前你可以改。</div>'
+    + personChips()
+    + '<label for="ta-new">这次做了什么（中文，一句话）</label>'
+    + '<textarea id="ta-new" placeholder="例如：自己读完了两本绘本"></textarea>'
+    + '<div class="row"><button class="btn primary" id="btn-save">记下</button></div>'
+    + '</div>';
+
+  h += '<div class="card"><h3>我记的进度</h3>';
+  if(!evs.length){
+    h += '<div class="empty">这个人还没有记录。</div>';
+  }
+  for(const ev of evs){
+    const text = (ev.payload && (ev.payload["进度"] || ev.payload["已完成项目"])) || "";
+    h += '<div class="meta" style="margin-top:12px">' + esc(ev.happened_on) + ' · '
+       + esc(ev.provider) + (ev.status === "superseded" ? ' · 已被更正' : '') + '</div>';
+    h += '<div class="big">' + esc(text) + '</div>';
+    h += '<div class="row"><button class="btn" data-fix="' + esc(ev.event_id) + '">更正</button>'
+       + '<button class="btn" data-revoke="' + esc(ev.event_id) + '">撤回</button></div>';
+    h += '<div id="fix-' + esc(ev.event_id) + '"></div>';
+  }
+  h += '</div>';
+  out.innerHTML = h;
+
+  // 学习页也要响应选人：之前只有 renderPlan 绑了 [data-pick]，
+  // 这里点另一个孩子，写入的仍是默认那一个。
+  out.querySelectorAll("[data-pick]").forEach((b) => {
+    b.addEventListener("click", () => { picked = b.dataset.pick; renderStudy(); });
+  });
+
+  $("btn-save").addEventListener("click", async () => {
+    const text = $("ta-new").value.trim();
+    if(!text){ flash("先写一句今天做了什么。", true); return; }
+    flash("正在记…");
+    try{
+      const res = await post("/api/life-events", {
+        source_id: "study_app", subject_id: picked, event_type: "study_progress",
+        payload: {"进度": text}, happened_on: "",
+        provider: "我在这台设备上记的", source_kind: "app",
+        grants: [],
+      });
+      // 按服务端的 created 说话：同一天同一来源的重复导入不会新建记录，
+      // 这时说「记下了」会让人以为存进了一条，实际是命中了已有那条。
+      // 反馈写在外面的 #flash：写在列表内部会被下面的 renderStudy() 替换掉，
+      // 用户刚点完保存就什么也看不到。
+      if(res.created){
+        $("ta-new").value = "";
+        flash("记下了。别人要看到它，需要你授权之后才会给出去。");
+      }else{
+        flash("今天这个人已经有一条学习记录了，这次没有新建。"
+          + "要改内容请用下面的「更正」，不要重复记一条。");
+      }
+      await renderStudy();
+      // renderStudy 之后还要再说一次：它重渲染时不会动 #flash，
+      // 但列表内容变了，这句结论要留在用户眼前。
+      flash(res.created
+        ? "记下了。别人要看到它，需要你授权之后才会给出去。"
+        : "今天这个人已经有一条学习记录了，这次没有新建。"
+          + "要改内容请用下面的「更正」，不要重复记一条。");
+    }catch(err){
+      flash("没记上：" + err.message, true);
+    }
+  });
+  out.querySelectorAll("[data-fix]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const box = $("fix-" + btn.dataset.fix);
+      if(!box) return;
+      if(box.innerHTML){ box.innerHTML = ""; return; }
+      const cur = evs.find((e) => e.event_id === btn.dataset.fix);
+      const old = (cur && cur.payload && (cur.payload["进度"] || cur.payload["已完成项目"])) || "";
+      box.innerHTML = '<label>更正成</label>'
+        + '<textarea id="ta-' + esc(btn.dataset.fix) + '">' + esc(old) + '</textarea>'
+        + '<div class="row"><button class="btn primary" data-do-fix="'
+        + esc(btn.dataset.fix) + '">保存更正</button></div>'
+        ;
+      box.querySelector("[data-do-fix]").addEventListener("click", async () => {
+        const text = $("ta-" + btn.dataset.fix).value.trim();
+        if(!text){ flash("写一句更正后的内容。", true); return; }
+        flash("正在保存…");
+        try{
+          // 只发这一个键：服务端按新 payload 整份替换旧内容，
+          // 想保留别的字段要一起写进来，这里明说，不偷偷合并。
+          await post("/api/life-events/" + encodeURIComponent(btn.dataset.fix) + "/correct",
+                     {payload: {"进度": text}});
+          flash("已更正。旧记录标为被替代，别人下次读到的是新内容。");
+          // 不在这里整页重渲染：重新渲染会把这句话连同表单一起替换掉，
+          // 用户刚点完保存就看不到任何反馈。列表在下次进入这一页时再读。
+          box.innerHTML = "";
+          const cur = evs.find((e) => e.event_id === btn.dataset.fix);
+          if(cur){
+            cur.payload = {"进度": text};
+            cur.status = "superseded";
+            // 服务端建更正记录时已经在 provider 上加了「（已更正）」，
+            // 这里不能再加一次：界面上会出现「（已更正）（已更正）」。
+            // 本地这条只是即时把旧记录标成被替代，来源文字按原样留着。
+          }
+        }catch(err){
+          flash("没能更正：" + err.message, true);
+        }
+      });
+    });
+  });
+  out.querySelectorAll("[data-revoke]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      if(!confirm("撤回后，别人新查就看不到这条。确定吗？")) return;
+      try{
+        await post("/api/life-events/" + encodeURIComponent(btn.dataset.revoke) + "/revoke", {});
+        await renderStudy();
+      }catch(err){
+        alert("没能撤回：" + err.message);
+      }
+    });
+  });
+}
+
+/* ---------- 视图二：周末安排（第二个应用自己的产出） ---------- */
+async function renderPlan(){
+  const out = $("out");
+  if(!myPersons.length){
+    out.innerHTML = '<div class="empty">还没有可给出建议的对象。</div>';
+    return;
+  }
+  out.innerHTML = '<div class="card"><h3>下一步建议</h3>'
+    + '<div class="meta">只依据已授权给你的近况，不重填人物背景。</div>'
+    + personChips()
+    + '<div class="row"><button class="btn primary" id="btn-ask">给一条建议</button></div>'
+    + '<div id="plan-result"></div></div>';
+  out.querySelectorAll("[data-pick]").forEach((b) => {
+    b.addEventListener("click", () => { picked = b.dataset.pick; renderPlan(); });
+  });
+  $("btn-ask").addEventListener("click", async () => {
+    const box = $("plan-result");
+    box.innerHTML = '<div class="state">正在想…</div>';
+    try{
+      const d = await post("/api/suggestion", {subject_id: picked});
+      if(d.status === "no_data"){
+        box.innerHTML = '<div class="notice">' + esc(d.note) + '</div>';
+        return;
+      }
+      if(d.status === "model_failed"){
+        box.innerHTML = '<div class="notice bad">' + esc(d.note) + '</div>';
+        return;
+      }
+      // 记录里的同一个值给了两个数（字段还是旧的，本人核对时改过正文）。
+      // 这时候给建议只能二选一，用户不知道最后信了哪个，所以服务端直接停下。
+      // 这里必须单独接住：漏了它，状态会掉进下面的成功分支，
+      // suggestion 是空串，用户看到的是「这条建议依据了（没有可用依据）」——
+      // 一个说不通的死胡同，也没有告诉他下一步该干什么。
+      if(d.status === "needs_confirm"){
+        renderConflict(box, d);
+        return;
+      }
+      let h = '<div class="big">' + esc(d.suggestion) + '</div>';
+      if(d.confidence){
+        h += '<div class="state">依据充分程度：'
+           + esc(confText(d.confidence)) + '</div>';
+      }
+      // 依据只列真正送进模型的那些（used_sources），不列全部授权近况。
+      // 列全部的话，标题写「这条建议依据了」，但有些近况根本没参与推理，
+      // 用户核对时会发现依据比实际多——那是拿没用的信息冒充依据。
+      // 服务端把 sources（全部授权近况）和 used_sources（实际送模型的）
+      // 分开返回，界面上要能看出这个差别。
+      h += '<div class="sources"><h4>这条建议依据了</h4>';
+      const srcs = d.used_sources || [];
+      if(!srcs.length) h += '<div class="s">（没有可用依据）</div>';
+      for(const s of srcs){
+        // 发生日期读不清时是空串，留空会显示成一条悬空的分隔点。
+        const when = s.happened_on ? esc(s.happened_on) : "发生日期未读到";
+        // source 是内部来源 ID（study_app、photo_xxx），普通人看不出是什么。
+        // 优先用 provider：那是给人看的一句话，写清了是谁在什么情况下记的。
+        const who = s.provider || sourceText(s.source, s.event_type);
+        h += '<div class="s">' + esc(who) + ' · ' + when
+           + (s.is_device ? ' · 设备数据，不是本人自述' : '') + '</div>';
+      }
+      h += '</div>';
+      box.innerHTML = h;
+    }catch(err){
+      box.innerHTML = '<div class="notice bad">没拿到建议：' + esc(err.message) + '</div>';
+    }
+  });
+}
+
+async function render(){
+  if(view === "study") await renderStudy();
+  else await renderPlan();
+}
+
+document.querySelectorAll(".tab").forEach((tab) => {
+  tab.addEventListener("click", () => {
+    document.querySelectorAll(".tab").forEach((t) =>
+      t.setAttribute("aria-selected", String(t === tab)));
+    view = tab.dataset.view;
+    render();
+  });
+});
+
+if("serviceWorker" in navigator && window.isSecureContext !== false){
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/static/sw.js").catch(() => {});
+  });
+}
+</script>
+</body>
+</html>

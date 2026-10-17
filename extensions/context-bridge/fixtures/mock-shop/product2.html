@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>模拟商店 · 商品页 2（测试数据）</title>
+<link rel="stylesheet" href="shop.css">
+</head>
+<body>
+<main class="shop">
+  <header class="shop-head">
+    <span class="shop-tag">模拟商店 · 测试数据，不是真实电商</span>
+    <h1 data-cb-title>儿童绘画套装</h1>
+    <p class="shop-sub" data-cb-product-id="pr_draw_set">商品编号 pr_draw_set · 本地虚构商品</p>
+  </header>
+
+  <section class="shop-body">
+    <div class="shop-form">
+      <div class="shop-readonly shop-sku">
+        <span>商品编号（页面自己标注，插件只核对）</span>
+        <input data-cb-field="sku" id="f-sku" readonly value="pr_draw_set">
+      </div>
+
+      <label class="shop-field">
+        <span>数量</span>
+        <input data-cb-field="quantity" id="f-qty" type="number" min="1" max="5" value="1">
+      </label>
+
+      <label class="shop-field">
+        <span>收货人</span>
+        <input data-cb-field="recipient_name" id="f-name" type="text" placeholder="虚构收货人姓名">
+      </label>
+
+      <label class="shop-field">
+        <span>收货电话</span>
+        <input data-cb-field="recipient_phone" id="f-phone" type="tel" placeholder="虚构收货电话">
+      </label>
+
+      <label class="shop-field">
+        <span>收货地址</span>
+        <textarea data-cb-field="delivery_address" id="f-addr" rows="2" placeholder="虚构收货地址"></textarea>
+      </label>
+
+      <div class="shop-readonly">
+        <span>商品单价</span>
+        <strong data-cb-price>168</strong> 元
+      </div>
+      <div class="shop-readonly">
+        <span>库存</span>
+        <strong data-cb-stock>有货</strong>
+      </div>
+      <div class="shop-readonly shop-total">
+        <span>合计</span>
+        <strong data-cb-total>—</strong> 元
+      </div>
+
+      <button data-cb-order-submit id="btn-order" disabled>提交订单（模拟，不会真实下单）</button>
+      <p class="shop-fine" id="shop-hint">规格和收货资料填齐后才会开放提交。</p>
+    </div>
+
+    <aside class="shop-side">
+      <h2>这一页怎么被验证</h2>
+      <ul>
+        <li>扩展只填上面带标记的控件，不会改价格和库存。</li>
+        <li>总价由页面自己按数量和单价重算。</li>
+        <li>提交按钮是否可点由页面判断，插件不代点。</li>
+      </ul>
+      <div class="shop-state">
+        <span>扩展是否加载</span>
+        <strong id="ext-state">检测中…</strong>
+      </div>
+    </aside>
+  </section>
+</main>
+<script src="shop.js"></script>
+</body>
+</html>

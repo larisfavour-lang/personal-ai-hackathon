@@ -1,0 +1,4172 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f7f6f3">
+<link rel="manifest" href="/static/manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png">
+<link rel="apple-touch-icon" href="/static/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="小助理">
+<meta name="mobile-web-app-capable" content="yes">
+<title>小助理</title>
+<style>
+/* Hallmark · macrostructure: Conversation-first workspace · tone: quiet domestic
+ * anchor hue: warm sand oklch(72% 0.03 78) · paper oklch(97% 0.008 85)
+ * states: default · hover · focus-visible · active · disabled · loading · error · success
+ * in-place t19 refinement; measured contrast and viewport results live in task evidence
+ */
+:root{
+  --paper: #f7f6f3;
+  --paper-2: oklch(96% 0.008 85);
+  --surface: oklch(99% 0.004 85);
+  --ink: oklch(24% 0.012 75);
+  --ink-2: oklch(42% 0.014 75);
+  --ink-3: oklch(46% 0.012 75);
+  --line: oklch(90% 0.008 85);
+  --line-2: oklch(86% 0.01 82);
+  --accent: #34463f;
+  --accent-ink: #f7f6f3;
+  --me-soft: oklch(93% 0.008 85);
+  --field-line: oklch(57% 0.014 85);
+  --focus: oklch(43% 0.06 155);
+  --overlay: oklch(24% 0.012 75 / .30);
+  --accent-soft: oklch(94% 0.03 155);
+  --wait: oklch(52% 0.09 60);
+  --wait-soft: oklch(95% 0.04 75);
+  --bad: oklch(48% 0.13 25);
+  --bad-soft: oklch(95% 0.04 25);
+  --sim: oklch(48% 0.08 250);
+  --sim-soft: oklch(95% 0.025 250);
+  --radius: 14px;
+  --radius-s: 10px;
+  --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
+  --space-5: 20px; --space-6: 28px;
+  --font-body: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB",
+    "Noto Sans CJK SC", "Microsoft YaHei", sans-serif;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur: 180ms;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;overflow-x:clip}
+body{
+  background:var(--paper); color:var(--ink);
+  font-family:var(--font-body); font-size:16px; line-height:1.65;
+  -webkit-font-smoothing:antialiased; -webkit-text-size-adjust:100%;
+}
+button{font-family:inherit;font-size:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px;border-radius:4px}
+
+/* ---------- 手机优先的单栏会话 ---------- */
+.app{
+  max-width:520px;margin:0 auto;min-height:100dvh;
+  display:flex;flex-direction:column;background:var(--paper);
+  position:relative;
+}
+.topbar{
+  position:sticky;top:0;z-index:20;
+  display:flex;align-items:center;gap:var(--space-3);
+  padding:calc(env(safe-area-inset-top,0px) + 10px) var(--space-4) 10px;
+  background:var(--paper);
+  border-bottom:1px solid var(--line);
+}
+.avatar{
+  width:36px;height:36px;border-radius:50%;flex:none;
+  background:var(--accent-soft);color:var(--accent);
+  display:grid;place-items:center;font-size:15px;font-weight:600;
+}
+.topbar .who{flex:1;min-width:0}
+.topbar .who b{display:block;font-size:15px;font-weight:600;line-height:1.3}
+.topbar .who span{display:block;font-size:12px;color:var(--ink-3);line-height:1.4;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.iconbtn{
+  width:44px;height:44px;flex:none;border:1px solid transparent;background:transparent;
+  border-radius:10px;display:grid;place-items:center;cursor:pointer;
+  font-size:15px;color:var(--ink-2);transition:background var(--dur) var(--ease-out);
+}
+@media (hover:hover){.iconbtn:hover{background:var(--paper-2)}}
+.iconbtn:active{transform:translateY(1px)}
+
+.stream{
+  flex:1;padding:20px var(--space-4) 28px;
+  display:flex;flex-direction:column;gap:14px;
+}
+.msg{max-width:92%;min-width:0;display:flex;flex-direction:column;gap:6px}
+.msg.me{align-self:flex-end;align-items:flex-end}
+.msg.pa{align-self:flex-start;align-items:flex-start}
+.bubble{
+  padding:12px 14px;border-radius:12px;font-size:16px;line-height:1.65;
+  overflow-wrap:anywhere;white-space:pre-wrap;
+}
+.msg.me .bubble{background:var(--me-soft);color:var(--ink);border:0;border-bottom-right-radius:4px}
+.msg.pa .bubble{background:transparent;color:var(--ink);border:0;padding:2px 0}
+.msg .meta{font-size:12px;color:var(--ink-3);padding:0 2px}
+.msg.me::before{content:"你";font-size:12px;color:var(--ink-3);padding-right:2px}
+.msg.pa:has(.bubble)::before{content:"小助手";font-size:12px;color:var(--accent);font-weight:600}
+
+.daymark{align-self:center;font-size:11.5px;color:var(--ink-3);
+  background:transparent;border:0;
+  padding:2px 0;border-radius:0;margin:var(--space-2) 0}
+
+/* ---------- 事项卡：嵌入消息流 ---------- */
+.matter{
+  align-self:stretch;max-width:100%;
+  background:var(--surface);border:1px solid var(--line-2);border-radius:var(--radius);
+  padding:var(--space-4);
+}
+.matter h3{margin:0 0 var(--space-1);font-size:16px;font-weight:600;font-style:normal;
+  display:flex;align-items:center;gap:var(--space-2);flex-wrap:wrap}
+.matter .subject{font-size:12.5px;color:var(--ink-2);margin-bottom:var(--space-3)}
+.state{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:500;
+  padding:2px 9px;border-radius:20px;white-space:nowrap}
+.state.wait{background:var(--wait-soft);color:var(--wait)}
+.state.ok{background:var(--accent-soft);color:var(--accent)}
+.state.bad{background:var(--bad-soft);color:var(--bad)}
+.state.sim{background:var(--sim-soft);color:var(--sim)}
+.state.neutral{background:var(--paper-2);color:var(--ink-2)}
+.dot{width:5px;height:5px;border-radius:50%;background:currentColor;flex:none}
+.dot.pulse{animation:pulse 1.4s var(--ease-out) infinite}
+@keyframes pulse{0%,100%{opacity:.35}50%{opacity:1}}
+
+.matter dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:var(--space-1) var(--space-3);
+  font-size:13.5px}
+.matter dt{color:var(--ink-3);white-space:nowrap}
+.matter dd{margin:0;min-width:0;overflow-wrap:anywhere}
+
+.factlist{margin:var(--space-3) 0 0;padding:0;list-style:none;display:flex;
+  flex-direction:column;gap:var(--space-2)}
+.factlist li{font-size:12.5px;color:var(--ink-2);padding-left:14px;position:relative;line-height:1.55}
+.factlist li::before{content:"";position:absolute;left:2px;top:8px;width:4px;height:4px;
+  border-radius:50%;background:var(--line-2)}
+.factlist .src{color:var(--ink-3);font-size:11.5px}
+.factlist .stale{color:var(--ink-3);text-decoration:line-through}
+
+.acts{margin-top:var(--space-4);display:flex;flex-direction:column;gap:var(--space-2)}
+.btn{
+  width:100%;padding:12px 16px;border-radius:var(--radius-s);border:1px solid var(--line-2);
+  background:var(--surface);cursor:pointer;font-size:14.5px;font-weight:500;
+  transition:background var(--dur) var(--ease-out),transform var(--dur) var(--ease-out);
+  min-height:44px;
+}
+@media (hover:hover){.btn:hover{background:var(--paper-2)}}
+.btn:active{transform:translateY(1px)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+@media (hover:hover){.btn.primary:hover{background:color-mix(in oklab, var(--accent) 88%, black)}}
+.btn[disabled]{opacity:.5;cursor:not-allowed;transform:none}
+.btn.loading{position:relative;padding-right:40px}
+.btn.loading:not(.primary){color:var(--ink)}
+.btn.loading::after{content:"";position:absolute;right:14px;top:calc(50% - 8px);width:16px;height:16px;
+  border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;
+  animation:spin .7s linear infinite}
+.btn.ghost.loading::after{border-color:var(--line-2);border-top-color:var(--accent)}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.receipt{margin-top:var(--space-3);padding:var(--space-3);border-radius:var(--radius-s);
+  background:var(--sim-soft);font-size:13px;color:var(--sim);line-height:1.6}
+.receipt b{font-weight:600}
+
+.negotiation{margin-top:var(--space-3);border-top:1px solid var(--line);padding-top:var(--space-3)}
+details summary{cursor:pointer;font-size:14px;min-height:44px;color:var(--ink-2);list-style:none;
+  display:flex;align-items:center;gap:6px;padding:4px 0}
+details summary::-webkit-details-marker{display:none}
+details summary::before{content:"›";font-size:14px;color:var(--ink-3);
+  transition:transform var(--dur) var(--ease-out)}
+details[open] summary::before{transform:rotate(90deg)}
+.nlog{margin-top:var(--space-2);display:flex;flex-direction:column;gap:var(--space-2)}
+.nlog .row{font-size:14px;line-height:1.65;padding:6px 0;border:0;color:var(--ink-2)}
+.nlog .row b{font-weight:600}
+.nlog .row.you b{color:var(--accent)}
+.nlog .row.them b{color:var(--ink)}
+.nlog .row.sys b{color:var(--wait)}
+
+/* ---------- 底部输入 ---------- */
+.composer{
+  position:sticky;bottom:0;z-index:20;
+  padding:var(--space-2) var(--space-4) calc(env(safe-area-inset-bottom,0px) + var(--space-2));
+  background:var(--paper);
+  border-top:1px solid var(--line);
+  display:flex;gap:var(--space-2);align-items:flex-end;
+}
+.composer textarea{
+  flex:1;min-width:0;resize:none;border:1px solid var(--field-line);border-radius:12px;
+  padding:11px 14px;font:inherit;font-size:16px;line-height:1.5;background:var(--surface);
+  max-height:132px;min-height:44px;
+}
+.composer textarea::placeholder{color:var(--ink-3)}
+.send{
+  width:44px;height:44px;flex:none;border:none;border-radius:50%;
+  background:var(--accent);color:#fff;cursor:pointer;display:grid;place-items:center;
+  font-size:17px;transition:opacity var(--dur) var(--ease-out);
+}
+.send[disabled]{opacity:.4;cursor:not-allowed}
+.send:not([disabled]):active{transform:scale(.94)}
+.quick{display:flex;gap:var(--space-2);padding:0 var(--space-4) var(--space-2);
+  overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.quick::-webkit-scrollbar{display:none}
+.quick button{
+  flex:none;padding:6px 12px;border-radius:20px;border:1px solid var(--line);
+  background:var(--surface);font-size:12.5px;color:var(--ink-2);cursor:pointer;
+  white-space:nowrap;min-height:44px;
+}
+@media (hover:hover){.quick button:hover{background:var(--paper-2)}}
+
+/* ---------- 覆盖层：人物详情 / 演示菜单 ---------- */
+.sheet{
+  /* z-index 必须高于侧栏（手机上 .side 是 50），否则从侧栏点开人物时，
+     详情被侧栏压在下面，肉眼只看到侧栏。 */
+  position:fixed;inset:0;z-index:60;display:none;
+  background:var(--overlay);
+}
+.sheet.open{display:block;animation:fade var(--dur) var(--ease-out)}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+.sheet .panel{
+  position:absolute;left:0;right:0;bottom:0;max-height:88dvh;overflow-y:auto;
+  background:var(--surface);border-radius:16px 16px 0 0;
+  padding:var(--space-4) var(--space-4) calc(env(safe-area-inset-bottom,0px) + var(--space-5));
+  animation:slideup 220ms var(--ease-out);
+  max-width:520px;margin:0 auto;
+}
+@keyframes slideup{from{transform:translateY(14px);opacity:.6}to{transform:none;opacity:1}}
+.sheet .grab{width:36px;height:4px;border-radius:2px;background:var(--line-2);
+  margin:0 auto var(--space-3)}
+.sheet h2{margin:0 0 8px;font-size:20px;font-weight:600;font-style:normal}
+.sheet .sub{font-size:13px;color:var(--ink-2);margin-bottom:var(--space-4)}
+.sheet section{margin-bottom:var(--space-5)}
+.sheet section h4{margin:0 0 var(--space-2);font-size:14px;font-weight:600;
+  color:var(--ink-3);letter-spacing:.04em;font-style:normal}
+.kv{display:flex;flex-direction:column;gap:var(--space-2)}
+.kv .item{font-size:15px;line-height:1.65;padding:var(--space-2) 0;
+  background:transparent;border:0;border-bottom:1px solid var(--line);border-radius:0}
+.kv .item .k{font-size:11.5px;color:var(--ink-3);display:block;margin-bottom:1px}
+.kv .item .v{overflow-wrap:anywhere}
+.kv .item .prov{font-size:11.5px;color:var(--ink-3);margin-top:3px}
+.kv .item.old{opacity:.62}
+.kv .item.old .v{text-decoration:line-through}
+.chip{display:inline-block;font-size:12px;padding:3px 10px;border-radius:20px;
+  background:var(--paper-2);border:1px solid var(--line);color:var(--ink-2);margin:0 6px 6px 0}
+.chip.btn-chip{cursor:pointer}
+@media (hover:hover){.chip.btn-chip:hover{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}}
+/* 裁剪预览。四角的把手要大：手机上手指点不中小块，
+   用户反复点不中就会以为这个功能没做。 */
+.crop{position:relative;background:var(--ink);border-radius:var(--radius-s);
+  overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none}
+.crop img{display:block;width:100%;height:auto;pointer-events:none}
+.crop .mask{position:absolute;background:rgba(20,18,15,.55)}
+.crop .box{position:absolute;border:1.5px solid #fff;box-sizing:border-box}
+.crop .h{position:absolute;width:26px;height:26px;border:2.5px solid #fff;
+  background:rgba(20,18,15,.18)}
+.crop .h.tl{left:-3px;top:-3px;border-right:0;border-bottom:0}
+.crop .h.tr{right:-3px;top:-3px;border-left:0;border-bottom:0}
+.crop .h.bl{left:-3px;bottom:-3px;border-right:0;border-top:0}
+.crop .h.br{right:-3px;bottom:-3px;border-left:0;border-top:0}
+.crumb{margin-bottom:var(--space-3)}
+.crumb .btn{width:100%}
+.wait-item{font-size:13px;line-height:1.6;padding:var(--space-3);
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-s);
+  margin-bottom:var(--space-2);cursor:pointer;text-align:left;width:100%;display:block}
+@media (hover:hover){.wait-item:hover{border-color:var(--accent)}}
+.wait-item .w-k{display:flex;align-items:center;justify-content:space-between;gap:8px;
+  margin-bottom:5px}
+.wait-item .w-since{font-size:11.5px;color:var(--ink-3)}
+.wait-item .w-q{font-size:12.5px;color:var(--ink-2)}
+/* 事项和共同事项的条目。和 .wait-item 同一套写法，且必须放在媒体查询之外：
+   之前它只写在桌面端的 @media(min-width:900px) 里，手机宽度下整条规则
+   不生效，button 退回浏览器默认样式——灰底 #EFEFEF、2px 黑边，
+   在一片浅色界面里格外突出，看着就像「这些条目被单独标了出来」。
+   现在两个宽度下都是同一副样子：无底色、细边框、文字用正文色。 */
+.matter-item{font-size:13px;line-height:1.6;padding:var(--space-3);
+  background:transparent;border:1px solid var(--line);border-radius:var(--radius-s);
+  margin-bottom:var(--space-2);cursor:pointer;text-align:left;width:100%;
+  display:block;color:var(--ink)}
+@media (hover:hover){.matter-item:hover{border-color:var(--accent)}}
+.matter-item .st{margin-top:4px}
+
+.demo-row{display:flex;align-items:center;justify-content:space-between;gap:var(--space-3);
+  padding:var(--space-3) 0;border-bottom:1px solid var(--line);font-size:14px}
+.demo-row:last-child{border-bottom:none}
+.demo-row .lbl{color:var(--ink-2)}
+.demo-row select,.demo-row input{
+  font:inherit;font-size:16px;padding:10px 12px;border:1px solid var(--field-line);
+  border-radius:8px;background:var(--surface);color:var(--ink);max-width:100%;min-height:44px;
+}
+.notice{font-size:13px;color:var(--ink-2);line-height:1.65;margin-top:var(--space-3);
+  padding:var(--space-3);background:var(--paper-2);border-radius:var(--radius-s)}
+.badge{display:inline-block;font-size:10.5px;padding:1px 6px;border-radius:4px;
+  background:var(--paper-2);color:var(--ink-3);border:1px solid var(--line);
+  vertical-align:middle;margin-left:4px}
+
+/* ---------- 首屏「需要你处理」 ----------
+   放在消息流上方：手机上拉开侧栏才知道有事在办，等于把最要紧的
+   东西藏了一层。没有内容时整块隐藏，不占地方也不摆占位。 */
+.todo{padding:var(--space-3) var(--space-4) 0;display:none}
+.todo.has{display:block}
+.todo-head{display:flex;align-items:baseline;justify-content:space-between;
+  gap:8px;margin-bottom:var(--space-2)}
+.todo-head b{font-size:13.5px;font-weight:600}
+.todo-head .n{font-size:11.5px;color:var(--ink-3)}
+.todo-item{display:block;width:100%;text-align:left;cursor:pointer;
+  background:var(--surface);border:1px solid var(--line);
+  border-radius:var(--radius-s);padding:var(--space-3);
+  margin-bottom:var(--space-2);font-family:inherit;font-size:13px;
+  color:var(--ink);line-height:1.6}
+@media (hover:hover){.todo-item:hover{border-color:var(--accent)}}
+.todo-item .t{font-weight:500}
+.todo-item .why{font-size:12.5px;color:var(--ink-2);margin-top:2px}
+.todo-item .st{margin-top:6px}
+.todo-act{font-size:12px;color:var(--accent);margin-top:6px}
+
+/* ---------- 桌面：居中聊天 + 可展开侧栏 ---------- */
+@media (min-width:900px){
+  body{background:var(--paper)}
+  .app{max-width:520px;min-height:100dvh;
+    box-shadow:0 0 0 1px var(--line);}
+  .side{
+    position:fixed;top:0;right:0;bottom:0;width:min(380px,42vw);
+    background:var(--paper-2);border-left:1px solid var(--line);
+    padding:var(--space-5);overflow-y:auto;z-index:30;
+    transform:translateX(100%);transition:transform 240ms var(--ease-out);
+  }
+  .side.open{transform:none}
+  .side h2{margin:0 0 var(--space-4);font-size:15px;font-weight:600;font-style:normal}
+  .side-close{position:absolute;top:var(--space-4);right:var(--space-4)}
+}
+@media (max-width:899px){
+  .side{
+    position:fixed;inset:0;z-index:50;background:var(--paper);
+    transform:translateY(100%);transition:transform 240ms var(--ease-out);
+    overflow-y:auto;padding:var(--space-4);
+    padding-top:calc(env(safe-area-inset-top,0px) + var(--space-4));
+  }
+  .side.open{transform:none}
+}
+
+/* Shared form/control language: tokens above remain the sole palette authority. */
+input:not([type=file]):not([type=checkbox]),textarea,select{
+  font:inherit;font-size:16px;color:var(--ink);background:var(--surface);
+  min-height:44px;max-width:100%;border:1px solid var(--field-line);border-radius:8px;
+  outline-offset:2px;
+}
+input::placeholder,textarea::placeholder{color:var(--ink-3);opacity:1}
+button{min-height:44px;min-width:44px}
+button:disabled{cursor:not-allowed;opacity:.6}
+button:active:not(:disabled){transform:translateY(1px)}
+.sheet .sub,.side .sub{font-size:14px;line-height:1.65;color:var(--ink-2);overflow-wrap:anywhere}
+.settings-intro{margin-bottom:24px}
+.settings-section{padding:20px 0;border-bottom:1px solid var(--line);margin:0 !important}
+.settings-section:last-of-type{border-bottom:0}
+.settings-heading{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:8px}
+.settings-heading h3{font-size:16px;margin:0;font-weight:600}
+.settings-value{font-size:16px;color:var(--ink);overflow-wrap:anywhere}
+.settings-section .btn{width:auto;max-width:100%;text-align:center}
+.settings-section>.btn{margin-top:8px}
+.settings-section .notice{background:transparent;padding:0}
+#model-config-box:empty,#phone-access:empty,#pair-box:empty{display:none}
+#model-config-box{padding-top:20px;min-width:0}
+.model-field{display:block;margin-bottom:20px;min-width:0}
+.model-field label{display:block;font-size:15px;font-weight:600;margin-bottom:7px}
+.model-field input{display:block;width:100%;padding:12px;min-height:48px;min-width:0}
+.model-field .field-help{font-size:13px;line-height:1.6;color:var(--ink-2);margin:7px 0 0;overflow-wrap:anywhere}
+.model-field input[aria-invalid=true]{border-color:var(--bad);background:var(--bad-soft);color:var(--ink)}
+.model-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.model-actions .btn{width:auto;flex:1 1 auto;white-space:nowrap}
+.model-actions #mc-save{flex-basis:100%}
+.model-feedback{font-size:14px;line-height:1.6;margin-top:12px;overflow-wrap:anywhere}
+.model-feedback:empty{display:none}
+.model-feedback[data-state=error]{color:var(--bad)}
+.model-feedback[data-state=warning]{color:var(--wait)}
+.model-feedback[data-state=success]{color:var(--accent)}
+.model-feedback[data-state=loading]{color:var(--ink-2)}
+.settings-close{margin-top:24px}
+.settings-danger{color:var(--bad);border-color:var(--line)}
+.cond-row{display:flex;flex-direction:column;gap:6px;margin-bottom:16px;font-size:15px}
+.cond-row input{width:100%;padding:10px 12px;min-width:0}
+#note-subjects .btn-chip{min-height:44px;display:inline-flex;align-items:center}
+#note-image-acts button{min-height:44px !important}
+@media(min-width:900px){
+ .app{max-width:760px;box-shadow:none;border-inline:1px solid var(--line)}
+ .stream{padding-inline:32px}
+ .composer,.topbar{padding-inline:24px}
+ .sheet .panel{max-width:600px;bottom:5vh;border-radius:16px;max-height:90dvh;padding:24px 28px}
+}
+
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation-duration:.01ms !important;transition-duration:.01ms !important}
+}
+
+/* t26 additive in the existing paper/ink voice; disclosure is opt-in. */
+.last-mile-field{display:block;margin:12px 0 4px;color:var(--ink-2)}
+.last-mile-field input,.last-mile-field textarea,.last-mile-field select{display:block;width:100%;min-height:44px;margin:4px 0 0;padding:10px 12px;border:1px solid var(--field-line);border-radius:10px;background:var(--surface);color:var(--ink);font:inherit}
+.last-mile-check{display:flex;gap:10px;align-items:center;min-height:44px;padding:8px 0;overflow-wrap:anywhere}
+.last-mile-check input{width:20px;height:20px;flex:none;accent-color:var(--accent)}
+.last-mile-source{overflow-wrap:anywhere;border-top:1px solid var(--line);padding:12px 0}
+.last-mile-actions{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+.last-mile-actions .btn{min-height:44px;white-space:nowrap}
+.last-mile-error{color:var(--bad);min-height:44px;overflow-wrap:anywhere}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <header class="topbar">
+    <div class="avatar" aria-hidden="true">助</div>
+    <div class="who">
+      <b>我的小助手</b>
+      <span id="status-line">准备就绪</span>
+    </div>
+    <button class="iconbtn" id="btn-side" aria-label="查看事项">☰</button>
+    <button class="iconbtn" id="btn-demo" aria-label="演示设置">⋯</button>
+  </header>
+
+  <!-- 未完事项与本人待处理：放在消息流之前，手机首屏不用先拉开侧栏
+       才知道有哪几件事在办、哪一件正等自己动手。没有内容时整块不渲染，
+       不摆「暂无事项」占位——空状态用消息流里那句招呼话说清楚就够了。
+       排在这里不是顺手：.stream 是 flex:1，会把排在它后面的内容整体顶到
+       整段对话底下。待办若放在它后面，实测 top 落在 4333px——用户得把
+       整段对话滚完才看见，那和拉开侧栏才知道没有区别。 -->
+  <section class="todo" id="todo" aria-label="需要你处理的事"></section>
+
+  <main class="stream" id="stream" aria-live="polite"></main>
+
+  <div class="quick" id="quick"></div>
+
+  <form class="composer" id="composer">
+    <label class="sr" for="input">对我说</label>
+    <textarea id="input" rows="1" placeholder="有什么想交给我？"
+      enterkeyhint="send" autocomplete="off"></textarea>
+    <button class="send" id="send" type="submit" aria-label="发送" disabled>↑</button>
+  </form>
+</div>
+
+<aside class="side" id="side" aria-label="事项与人物">
+  <button class="iconbtn side-close" id="side-close" aria-label="关闭">✕</button>
+  <h2>事项</h2>
+  <div id="side-matters"></div>
+  <h2 style="margin-top:24px">在等的事</h2>
+  <div id="side-waiting"></div>
+  <h2 style="margin-top:24px">共同事项</h2>
+  <div id="side-plans"></div>
+  <button class="btn ghost" id="btn-new-plan" style="margin-top:10px">发起共同事项</button>
+  <h2 style="margin-top:24px">资料库</h2>
+  <div class="sub" style="margin-bottom:8px">保存文字和图片，供后续安排时查用。</div>
+  <button class="btn ghost" id="btn-photo">添加资料</button>
+  <input type="file" id="photo-input" accept="image/*"
+    capture="environment" style="display:none">
+  <input type="file" id="note-input" accept="image/*" style="display:none">
+  <h2 style="margin-top:24px">小应用</h2>
+  <div class="sub" style="margin-bottom:8px">两个轻量应用共用同一份记录：
+    谁在学什么、周末怎么安排，都由它接着往下给建议。</div>
+  <button class="btn ghost" id="btn-open-apps">打开小应用</button>
+  <h2 style="margin-top:24px">我关心的人</h2>
+  <div id="side-persons"></div>
+</aside>
+
+<div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+  <div class="panel">
+    <div class="grab"></div>
+    <div id="sheet-body"></div>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const stream = $("stream");
+
+let currentTask = null;      // 当前打开的事项
+let busy = false;
+// 身份只来自服务端会话：打开页面时问一次 /api/me，之后所有请求都由服务端
+// 决定我是谁。这里不存身份，也不提供「切换成家长/朋友」的入口——
+// 产品里只有本人一个身份，选送礼对象只是选事项对象，不是换登录人。
+let ownerId = "";            // 本人身份，由 /api/me 填入
+let meName = "我";           // 本人的称呼，界面上用
+let personStack = [];        // 关系链点开的路径，用来「返回上一层」
+let lastPersons = [];        // 最近一次侧栏拿到的人物，拍照选主体时直接用
+let lastPlans = [];          // 最近一次拿到的共同事项，首屏「需要你处理」用同一份
+
+const STAGE_TEXT = {
+  created:        {t: "已记下", cls: "neutral"},
+  negotiating:    {t: "正在核实", cls: "wait"},
+  agreed:         {t: "方案已约定，等你确认", cls: "ok"},
+  counter_pending:{t: "对方提了新方案，需要你定", cls: "wait"},
+  purchased:      {t: "模拟订单已登记", cls: "sim"},
+  conflict:       {t: "暂时没办成", cls: "bad"},
+  failed:         {t: "暂时没办成", cls: "bad"},
+  blocked:        {t: "需要你补充一句", cls: "wait"},
+  // 记录刚被更正，旧方案已作废：给出重新协商的入口，不要让用户另开一件事。
+  needs_renegotiation: {t: "记录已更正，重新协商", cls: "wait"},
+  model_failed:   {t: "刚才没连上，可以重试", cls: "bad"},
+};
+const stageText = (s) => STAGE_TEXT[s] || {t: s, cls: "neutral"};
+
+/* 关系代码翻成中文，界面不出现 friend 这类英文键。 */
+const RELATION_TEXT = {
+  self: "我", friend: "朋友", friend_child: "朋友的孩子",
+  friend_spouse: "朋友的配偶", spouse: "配偶", own_child: "我的孩子",
+  family: "亲属", colleague: "同事", former_colleague: "前同事",
+  classmate: "同学", neighbor: "邻居", teacher: "老师", other: "其他",
+};
+const relationText = (r) => RELATION_TEXT[r] || r || "我记录的人";
+
+/* 把任何错误原因收成一句能给人看的话。
+
+服务端返回的错误原因不一定都是字符串：detail 可能是数组、可能是对象，
+插件那边的 error.message 也可能不是字符串。直接 new Error(它) 的话，
+err.message 就是 "[object Object]"，用户看到的是乱码而不是
+「配对码已过期，请重新生成」。这里统一收成字符串，宁可不具体，
+也不能把内部结构摊给用户。
+*/
+function errText(raw){
+  if(raw == null) return "";
+  if(typeof raw === "string") return raw.trim();
+  if(typeof raw === "number" || typeof raw === "boolean") return String(raw);
+  if(Array.isArray(raw)){
+    const parts = raw.map((d) => {
+      if(d == null) return "";
+      if(typeof d === "string") return d.trim();
+      if(typeof d === "object"){
+        const where = d.loc ? d.loc[d.loc.length - 1] : "";
+        const body = d.msg || d.message || "";
+        if(typeof body === "string" && body.trim()){
+          return where ? where + "：" + body.trim() : body.trim();
+        }
+      }
+      return "";
+    }).filter(Boolean);
+    return parts.join("；");
+  }
+  if(typeof raw === "object"){
+    const body = raw.msg || raw.message || raw.detail;
+    if(typeof body === "string" && body.trim()) return body.trim();
+    // 递归一层：detail 里再套对象时还能取出人话。
+    if(body && typeof body === "object") return errText(body);
+    return "";
+  }
+  return "";
+}
+
+async function api(path, opts){
+  const r = await fetch(path, opts);
+  const data = await r.json().catch(() => ({}));
+  if(!r.ok){
+    // 普通接口用 detail，插件接口用 {error:{code,message}}。
+    // 只读 detail 的话，插件那边返回的错误对象会被拼成 [object Object]，
+    // 用户看到的是乱码而不是「配对码过期了，请重新生成」。
+    // 两处都取，谁有内容用谁。
+    // detail 还可能是数组：FastAPI 的 422 校验错误就是 [{type,loc,msg}]，
+    // 直接拼进字符串同样得到 [object Object]。按 msg 字段拼成人话，
+    // 并说清是哪个字段，用户才知道该改什么。
+    // 形态全部交给 errText 收：detail 可能是数组、对象或字符串，
+    // 插件那边是 {error:{code,message}}。不在这里预先 JSON.stringify——
+    // 那会把 {"code":...} 这样的内部结构直接摊给用户看。
+    const fromError = data && data.error && data.error.message;
+    const msg = errText(fromError) || errText(data && data.detail)
+      || ("HTTP " + r.status);
+    const err = new Error(msg);
+    err.status = r.status;
+    err.code = (data && data.error && data.error.code) || "";
+    throw err;
+  }
+  return data;
+}
+const post = (path, body) => api(path, {
+  method: "POST", headers: {"Content-Type": "application/json"},
+  body: JSON.stringify(body),
+});
+const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g,
+  (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+/* ---------- 渲染消息流 ---------- */
+function bubble(role, text, meta){
+  const el = document.createElement("div");
+  el.className = "msg " + role;
+  el.innerHTML = '<div class="bubble">' + esc(text) + '</div>'
+    + (meta ? '<div class="meta">' + esc(meta) + '</div>' : "");
+  return el;
+}
+
+function factItem(f){
+  const stale = f.status !== "active";
+  return '<li class="' + (stale ? "stale-wrap" : "") + '">'
+    + '<span class="' + (stale ? "stale" : "") + '">'
+    + esc(f.attribute) + '：' + esc(f.value) + '</span>'
+    + '<span class="src"> · ' + esc(f.provider) + ' · ' + esc(f.observed_on)
+    + (stale ? ' · 已被更正' : '') + '</span></li>';
+}
+
+// 订单走到哪一步，以及下一步能点什么。
+// 用户只需要付一次钱。发货、物流、送达由系统在支付后自己接着更新，
+// 不给按钮：让用户去点「发货」「确认送达」是让用户伺候系统，
+// 真实电商里这两步本来就是平台和物流自己走的。
+// 全程本地模拟，界面上一直挂着这句说明，不让人误以为真买了、真送了。
+const ORDER_STEPS = [
+  {state: "purchased", label: "已登记"},
+  {state: "paid",      label: "已支付（模拟）"},
+  {state: "shipped",   label: "已发货（模拟）"},
+  {state: "delivered", label: "已送达（模拟）"},
+];
+
+function orderBlock(m, o){
+  let h = '<div class="receipt">';
+  h += esc(o.state === "purchased" ? "模拟订单已登记" : "订单 · " + orderLabel(o.state))
+     + '<br>单号 <b>' + esc(o.order_id) + '</b>'
+     + ' · ' + esc(o.product_name) + (o.spec ? ' · ' + esc(o.spec) : '')
+     + ' · ' + esc(o.amount_cny) + ' 元';
+  if(o.ship_no) h += '<br>物流单号 ' + esc(o.ship_no);
+  if(o.paid_at) h += '<br>支付时间 ' + esc(o.paid_at.slice(0, 16).replace("T", " "));
+  if(o.shipped_at) h += '<br>发货时间 ' + esc(o.shipped_at.slice(0, 16).replace("T", " "));
+  if(o.delivered_at) h += '<br>送达时间 ' + esc(o.delivered_at.slice(0, 16).replace("T", " "));
+  // 说清物流状态是谁更新的：系统跟着支付记录自动往下走，
+  // 不是用户点的，也不声称接了真实电商平台。
+  if(o.state !== "purchased"){
+    h += '<br><span style="opacity:.8">物流状态由系统跟着支付记录自动更新，'
+       + '本地模拟登记，未连接真实电商平台。</span>';
+  }
+  h += '<br><span style="opacity:.8">本地模拟登记，未发生真实购买或配送。</span></div>';
+  const next = orderNext(o.state);
+  if(next) h += '<button class="btn primary" data-act="order-' + next.act + '" data-task="'
+     + esc(m.task_id) + '" data-order="' + esc(o.order_id) + '">' + esc(next.label) + '</button>';
+  return h;
+}
+
+// 商品详情：演示数据里没有商品图片，所以不摆占位图。
+// 摊开真正会改变决策的属性：价格、适龄、要不要尺码、是否发声、是否便于收纳，
+// 以及这一件在当前事项下逐项过不过得了硬条件。这些比一张图有用。
+/* 代填回执弹层：把插件实际填进页面的值和服务端复核结果逐字段列出来。
+
+   页面读回值（observed_fields）是本人判断「这个 verified 是不是真的」的
+   唯一依据，所以每个字段都同时显示期望值和实际读回值；不一致的地方
+   明确标出来，不用一个总体状态含糊过去。
+*/
+// 协议键翻成中文给本人看，内部 ID 原样保留在标题行里便于核对。
+// 直接把 sku / filled 摊给用户，等于让他自己猜「filled 是不是填好了」。
+const RECEIPT_FIELD_LABELS = {
+  // sku 的值是演示商店里的商品编码（如 pr_draw_set），不是能读懂的商品名。
+  // 标签写成「商品编码」，用户才知道这是编码而不是漏显示名称。
+  sku: "商品编码", quantity: "数量", size: "尺码", color: "颜色",
+  recipient_name: "收货人", recipient_phone: "收货电话",
+  delivery_address: "收货地址",
+};
+const RECEIPT_CLIENT_LABELS = {
+  filled: "已代填", partial: "部分完成", failed: "失败",
+};
+
+function openReceiptSheet(taskId, receipts){
+  let h = '<h2 id="sheet-title">代填回执</h2>';
+  if(!receipts.length){
+    h += '<div class="notice">这件事还没有代填回执。</div>';
+  }
+  const stateText = {
+    // partial 不能说成「有字段不一致」：它也可能是页面自己判定库存不足、
+    // 拒绝开放提交，那时字段其实对得上。文案要和卡片上的表述对齐，
+    // 不一致会让本人以为两处说的是两件事。
+    // verified 也一样要说清它证明的是「那一趟核对通过」，不是当前还能提交：
+    // 授权或方案后来变过，旧 receipt 的 status 不会被改写。
+    verified: "最近一次已完成代填，请核对当前方案与页面",
+    partial: "部分完成，请核对页面提示",
+    failed: "代填失败", stale: "已失效",
+  };
+  for(const r of receipts){
+    const label = stateText[r.status] || r.status;
+    h += '<div class="receipt" style="margin-top:10px">'
+       + '<b>' + esc(label) + '</b>'
+       + ' · ' + esc(RECEIPT_CLIENT_LABELS[r.client_status] || "插件未报告结果")
+       + (r.created_at ? ' · ' + esc(r.created_at.slice(0, 16).replace("T", " ")) : '')
+       + '</div>';
+    // 页面实际读回值：逐字段列，和参数包期望值一一对应。
+    const obs = r.observed_fields || {};
+    const keys = Object.keys(obs);
+    if(keys.length){
+      h += '<div class="kv" style="margin-top:8px">';
+      for(const k of keys){
+        h += '<div class="item"><span class="k">'
+           + esc(RECEIPT_FIELD_LABELS[k] || k) + '</span>'
+           + '<span class="v">' + esc(obs[k]) + '</span></div>';
+      }
+      h += '</div>';
+    }
+    // 不一致分两种，不能按一种渲染：
+    // 1) 参数包本身失效（field 为空，label 是整句原因，如「参数包已过期」）；
+    // 2) 页面字段和参数包对不上（有 field、有期望值和实际读回值）。
+    // 混成一种就会出现「undefined：页面读回空」这种看不懂的提示。
+    if(r.mismatches && r.mismatches.length){
+      const reasons = r.mismatches.filter((m) => !m || !m.field);
+      const fields = r.mismatches.filter((m) => m && m.field);
+      if(reasons.length){
+        h += '<div style="margin-top:8px;font-size:13px;color:var(--ink-2)">这份回执为什么没算通过：</div>';
+        for(const m of reasons){
+          const text = (m && (m.label || m.reason)) || (typeof m === "string" ? m : "");
+          if(text) h += '<div class="notice" style="margin-top:6px">' + esc(text) + '</div>';
+        }
+      }
+      if(fields.length){
+        h += '<div style="margin-top:8px;font-size:13px;color:var(--ink-2)">对不上的字段：</div>';
+        for(const m of fields){
+          h += '<div class="notice" style="margin-top:6px">'
+             + esc(m.label || RECEIPT_FIELD_LABELS[m.field] || m.field)
+             + '：页面读回「' + esc(m.observed || "空")
+             + '」，参数包里是「' + esc(m.expected || "空") + '」</div>';
+        }
+      }
+    }
+    // 这句话说的是这份记录的性质：回执记录的是页面被填了什么，
+    // 不代表已经下单或付款。写成「本地模拟登记」容易被读成
+    // 「这次代填是假的」，所以只说它证明了什么、没证明什么。
+    h += '<div class="sub" style="margin-top:6px">填到 ' + esc(r.target_origin || "")
+       + '。这份回执只说明页面被填了这些值，不代表已下单或已付款。</div>';
+  }
+  h += '<button class="btn ghost" data-close-sheet style="margin-top:12px">返回</button>';
+  $("sheet-body").innerHTML = h;
+  $("sheet").classList.add("open");
+}
+
+function openProductSheet(d, taskId){
+  let h = '<h2 id="sheet-title">' + esc(d.name) + '</h2>';
+  h += '<div class="sub">' + esc(d.category_label) + ' · ' + esc(d.price_cny) + ' 元'
+     + (d.current ? ' · 就是当前这件' : '') + '</div>';
+
+  h += '<section><h4>这一件怎么样</h4><div class="kv">';
+  h += '<div class="item"><span class="k">适龄</span><span class="v">'
+     + esc(d.age_hint || "没写") + '</span></div>';
+  h += '<div class="item"><span class="k">尺码</span><span class="v">'
+     + (d.has_size ? "要选尺码：" + esc(d.size_options.join("、"))
+        : "不需要选尺码") + '</span></div>';
+  h += '<div class="item"><span class="k">会不会响</span><span class="v">'
+     + (d.makes_noise ? "会发声" : "不发声") + '</span></div>';
+  h += '<div class="item"><span class="k">好不好收</span><span class="v">'
+     + (d.easy_to_store ? "便于收纳" : "不太好收纳") + '</span></div>';
+  if(d.note) h += '<div class="item"><span class="k">说明</span><span class="v">'
+     + esc(d.note) + '</span></div>';
+  h += '</div></section>';
+
+  // 逐项检查：只说「不合格」的话，看不出是查过了还是没查。
+  if(d.checks && d.checks.length){
+    h += '<section><h4>这个事项查下来</h4><div class="kv">';
+    for(const c of d.checks){
+      h += '<div class="item"><span class="k">' + esc(c.item) + '</span>'
+         + '<span class="v" style="color:' + (c.ok ? "inherit" : "#b3261e") + '">'
+         + esc(c.text) + '</span></div>';
+    }
+    h += '</div></section>';
+  }
+  if(!d.checks_ok){
+    h += '<div class="notice" style="margin-top:12px">这件现在换不过去：'
+       + esc((d.problems || []).join("；")) + '</div>';
+  }
+
+  // 没有商品图片这件事要说清楚，不摆占位图冒充有图。
+  h += '<div class="notice" style="margin-top:12px">' + esc(d.image_note || "") + '</div>';
+
+  // 专门放提示的位置。之前失败时是找第一个 .notice 改它的文字，
+  // 那会覆盖掉下面「演示数据没有商品图片」那句说明，用户看不出原因出自哪里。
+  h += '<div id="product-sheet-msg" class="notice" style="margin-top:12px;display:none"></div>';
+  if(!d.current && d.checks_ok){
+    h += '<button class="btn primary" data-act="choose" data-task="' + esc(taskId)
+       + '" data-product="' + esc(d.product_id) + '" style="margin-top:12px">'
+       + '换成这件</button>';
+  }
+  h += '<button class="btn ghost" data-close-sheet style="margin-top:12px">返回</button>';
+  $("sheet-body").innerHTML = h;
+  $("sheet").classList.add("open");
+}
+
+function orderLabel(state){
+  const s = ORDER_STEPS.find((x) => x.state === state);
+  return s ? s.label : state;
+}
+
+function orderNext(state){
+  // 只剩支付这一个动作。发货、物流、送达由系统在支付后自动更新。
+  if(state === "purchased") return {act: "pay", label: "支付（模拟）"};
+  return null;
+}
+
+// opts.inSheet 表示这张卡正渲染在协商详情弹层里。
+// 弹层里不能再放「查看协商详情」：那就是详情本身，放一个进去只会多点一次、
+// 而且弹层的监听器认不出这个动作，用户点了完全没有反应。
+function matterCard(m, detail, opts){
+  opts = opts || {};
+  const st = stageText(m.stage);
+  let h = '<div class="matter" data-task="' + esc(m.task_id) + '">';
+  h += '<h3>' + esc(m.utterance.length > 22 ? m.utterance.slice(0, 22) + "…" : m.utterance)
+     + '<span class="state ' + st.cls + '">'
+     + (m.stage === "negotiating" ? '<span class="dot pulse"></span>' : '<span class="dot"></span>')
+     + esc(st.t) + '</span></h3>';
+  h += '<div class="subject">给 ' + esc(m.subject_name || "还没确定的人")
+     + (m.budget_max != null ? ' · 预算 ' + esc(m.budget_max) + ' 元' : '') + '</div>';
+
+  if(detail && detail.facts && detail.facts.length){
+    h += '<ul class="factlist">' + detail.facts.slice(0, 4).map(factItem).join("") + '</ul>';
+  }
+
+  // 这次用了哪些资料。本人点过「用于这件事」才会出现在这里。
+  // 列的是来源、日期和正文，不含图片本体：图按 event_id 单独取，
+  // 服务端在那里按身份校验，列表里直接塞图等于绕过那道校验。
+  // 没有就不渲染这一段——空标题只会让用户以为资料丢了。
+  const notes = (detail && detail.linked_notes) || [];
+  if(notes.length){
+    h += '<dl style="margin-top:12px"><dt>这次用的资料</dt><dd>';
+    for(const n of notes){
+      const fields = n.fields || {};
+      const body = fields["正文"] || "";
+      h += '<div style="margin-bottom:8px">'
+         + '<div style="font-size:12.5px;color:var(--ink-3)">'
+         + esc(n.provider || n.source_label || "资料")
+         + (n.happened_on ? ' · ' + esc(n.happened_on) : '')
+         + '</div>'
+         + (body ? '<div>' + esc(body) + '</div>' : '')
+         + (n.attachments && n.attachments.length
+            ? '<div style="font-size:12.5px;color:var(--ink-3)">含 '
+              + n.attachments.length + ' 张配图</div>' : '')
+         + '</div>';
+    }
+    h += '</dd></dl>';
+  }
+
+  const p = m.latest_proposal;
+  if(p && (m.stage === "agreed" || m.stage === "counter_pending")){
+    h += '<dl style="margin-top:12px">';
+    h += '<dt>方案</dt><dd>' + esc(p.reason || "已选定商品") + '</dd>';
+    h += '</dl>';
+  }
+  if(m.stage === "needs_renegotiation"){
+    h += '<dl style="margin-top:12px"><dt>为什么变了</dt><dd>'
+       + esc(m.outcome || "记录刚被更正，之前的方案依据已变。")
+       + '</dd></dl>';
+  }
+  if(m.stage === "redirected"){
+    // 这件事已经按家庭活动重新记下。旧事项不删：原话和当时系统的错误回应
+    // 都是历史。这里给一个能点回去的入口，不再提示选送礼对象。
+    h += '<dl style="margin-top:12px"><dt>已经改成家庭活动</dt><dd>'
+       + esc(m.outcome || "这件事按家庭活动重新记下，原话保留。") + '</dd></dl>';
+    if(m.plan_id){
+      h += '<div style="margin-top:12px"><button class="btn primary"'
+         + ' data-act="open-plan" data-plan="' + esc(m.plan_id) + '">'
+         + '打开这件家庭活动</button></div>';
+    }
+  }
+  if(m.stage === "blocked"){
+    if(m.group_activity){
+      // 这句话是一场多家庭活动，被误当成送礼卡在「选一个对象」。
+      // 正确做法是给它一条改成家庭活动的路，而不是摆几个人名让它点一个——
+      // 点任何一个都是把「三家一起出游」按成「给某一个孩子准备礼物」。
+      h += '<dl style="margin-top:12px"><dt>这件事不是给某一个孩子准备礼物</dt><dd>'
+         + '按多家庭活动记更合适：各家自己给条件，不用点一个孩子。</dd></dl>';
+      h += '<div style="margin-top:12px"><button class="btn primary"'
+         + ' data-act="to-group-activity" data-task="' + esc(m.task_id) + '">'
+         + '改成家庭活动</button></div>';
+    }else{
+      h += '<dl style="margin-top:12px"><dt>要补什么</dt><dd>'
+         + esc(m.outcome || "送礼对象") + '</dd></dl>';
+      if(m.candidates && m.candidates.length){
+        h += '<div style="margin-top:12px"><div style="font-size:12.5px;color:var(--ink-3);'
+           + 'margin-bottom:6px">点一个就行</div><div id="cand-' + esc(m.task_id) + '">';
+        for(const c of m.candidates){
+          h += '<button class="chip btn-chip" data-act="pick-subject" data-task="'
+             + esc(m.task_id) + '" data-person="' + esc(c.person_id) + '">'
+             + esc(c.name) + (c.relation ? " · " + esc(c.relation) : "") + '</button>';
+        }
+        h += '</div></div>';
+      }
+    }
+  }
+  if(m.outcome && ["conflict","failed","model_failed"].indexOf(m.stage) >= 0){
+    h += '<dl style="margin-top:12px"><dt>情况</dt><dd>' + esc(m.outcome) + '</dd></dl>';
+  }
+
+  if(m.orders && m.orders.length){
+    const o = m.orders[m.orders.length - 1];
+    h += orderBlock(m, o);
+  }
+
+  // 代填回执入口必须放在订单条件之外：插件代填之后，事项通常还停在
+  // 「对方已接受，等你确认」，那时并没有模拟订单。把按钮嵌在 orders 里，
+  // 恰好是最需要看回执的那一刻它不出现。
+  if(m.receipts && m.receipts.length){
+    // 只看最新一条回执，不能 some()：历史上有过 verified、最新已经 partial
+    // 或 stale 时，some 仍判「已代填，等你核对后提交」，本人按这句话去提交，
+    // 提交的是上一次的参数包，服务端会挡回来，而提示完全指错了方向。
+    // receipts 由服务端按 created_at 倒序给，第一条就是最新。
+    const latest = m.receipts[0];
+    // 每种状态说清它自己的情况，不把 partial 一律说成字段不一致：
+    // 页面自己判定库存不足、拒绝开放提交时，字段其实是对得上的。
+    const receiptText = {
+      // verified 说的是「那一趟核对通过」，不等于当前参数包还能提交。
+      // 授权或方案后来变过，旧 receipt 的 status 不会被改写（那是历史事实），
+      // 可此时照「等你核对后提交」去提交，服务端会挡回来，提示却指错方向。
+      // 所以文案说清它证明的是最近一次已完成代填，当前方案要另外核对。
+      verified:  "最近一次已完成代填，请核对当前方案与页面",
+      partial:   "部分完成，请核对页面提示",
+      failed:    "代填失败，需要重来",
+      stale:     "参数包已失效，这份回执不能用来提交",
+    };
+    h += '<div class="receipt" style="margin-top:10px">'
+       + (receiptText[latest.status] || "有代填回执，请查看")
+       + '</div>'
+       + '<button class="btn ghost" data-act="view-receipts" data-task="'
+       + esc(m.task_id) + '" style="margin-top:8px">查看代填回执</button>';
+  }
+
+  // 候选商品：模型给的备选，和当前这件并列摆出来。
+  // 不摆的话用户看不到「还有什么可选」，换一件也无从下手。
+  if(m.product_candidates && m.product_candidates.length > 1){
+    h += '<div style="margin-top:12px"><div style="font-size:12.5px;color:var(--ink-3);'
+       + 'margin-bottom:6px">还有这些可选：点开看这一件的详情，'
+       + '换一件会重新检查预算、重复和品类</div>';
+    for(const c of m.product_candidates){
+      const mine = m.orders && m.orders.length
+        && m.orders[m.orders.length - 1].product_id === c.product_id;
+      // 点开是看详情，不再直接换。先看清这件怎么样，再决定换不换，
+      // 误点一下就换掉正在买的东西，用户根本来不及反应。
+      h += '<button class="chip btn-chip" data-act="view-product" data-task="'
+         + esc(m.task_id) + '" data-product="' + esc(c.product_id) + '"'
+         + '>'
+         + esc(c.product_name) + ' · ' + esc(c.price_cny) + ' 元'
+         + (mine ? ' · 就是这件' : '') + ' · 详情</button>';
+    }
+    h += '</div></div>';
+  }
+
+  h += '<div class="acts">';
+  if(m.stage === "agreed"){
+    h += '<button class="btn primary" data-act="confirm" data-task="' + esc(m.task_id)
+       + '" data-prop="' + esc(p ? p.proposal_id : "") + '">确认购买（模拟）</button>';
+  }
+  if(m.stage === "counter_pending"){
+    h += '<button class="btn primary" data-act="accept-confirm" data-task="' + esc(m.task_id)
+       + '" data-prop="' + esc(p ? p.proposal_id : "") + '">接受这个方案并确认（模拟）</button>';
+    h += '<button class="btn ghost" data-act="retry" data-task="' + esc(m.task_id)
+       + '">我再想想</button>';
+  }
+  if(m.stage === "model_failed" || m.stage === "failed" || m.stage === "conflict"){
+    h += '<button class="btn ghost" data-act="retry" data-task="' + esc(m.task_id)
+       + '">再试一次</button>';
+  }
+  if(m.stage === "blocked"){
+    h += '<button class="btn ghost" data-act="focus-input">我自己说名字</button>';
+  }
+  if(m.stage === "needs_renegotiation"){
+    // 旧方案已作废。重新协商会接着同一事项办，版本号往后排，不开新任务。
+    h += '<button class="btn primary" data-act="renegotiate" data-task="'
+       + esc(m.task_id) + '">按新记录重新协商</button>';
+  }
+  // 从消息流里点已有事项卡，必须能真正打开协商详情：双方实际交换了什么、
+  // 现在是谁在等谁。之前这里没有入口，卡片只是状态摘要，用户想看过程只能靠猜。
+  // 弹层里不放这个按钮：里面已经是详情，再放一个既重复又点不动。
+  if(!opts.inSheet){
+    h += '<button class="btn ghost" data-act="view-detail" data-task="'
+       + esc(m.task_id) + '">查看协商详情</button>';
+  }
+  h += '</div>';
+
+  if(detail && detail.messages && detail.messages.length){
+    // 弹层里这条沟通记录直接摊开展示，不再收进折叠：用户专门点进来
+    // 就是要看过程，再让他多点一次展开等于把入口当成负担。
+    h += opts.inSheet
+      ? '<div class="negotiation"><div class="nlog">'
+      : '<div class="negotiation"><details><summary>查看和对方助理的沟通</summary><div class="nlog">';
+    for(const msg of detail.messages){
+      const payload = msg.payload || {};
+      if(msg.kind === "propose"){
+        h += '<div class="row you"><b>我提出</b>：' + esc(payload.proposal ? payload.proposal.reason : "")
+           + '</div>';
+        if(payload.program_check && !payload.program_check.ok){
+          h += '<div class="row sys"><b>没通过</b>：'
+             + esc((payload.program_check.problems || []).join("；")) + '</div>';
+        }
+      }else if(["accept","reject","counter","ask_clarify"].indexOf(msg.kind) >= 0){
+        const label = {accept:"对方接受", reject:"对方说不行",
+          counter:"对方提了新方案", ask_clarify:"对方想再确认"}[msg.kind];
+        h += '<div class="row them"><b>' + label + '</b>：'
+           + esc(payload.review ? payload.review.reason : "") + '</div>';
+      }
+    }
+    h += opts.inSheet ? '</div></div>' : '</div></details></div>';
+  }
+  h += '</div>';
+  return h;
+}
+
+async function renderStream(){
+  // 读不到就说读不到，不要把界面留在旧身份的内容上。
+  // 之前这里没有 try/catch：任何一个接口失败，后面的渲染全部不执行，
+  // 页面看着「切换没反应」，其实旧内容还挂在屏幕上，比报错更糟。
+  let data, mattersData;
+  try{
+    data = await api("/api/conversation");
+    mattersData = await api("/api/matters");
+  }catch(err){
+    stream.innerHTML = "";
+    const el = document.createElement("div");
+    el.className = "msg pa";
+    el.innerHTML = '<div class="bubble">这个身份的内容没取到：' + esc(err.message)
+      + '<br>可以再切一次试试。</div>';
+    stream.appendChild(el);
+    return;
+  }
+  const mattersById = {};
+  for(const m of mattersData.matters) mattersById[m.task_id] = m;
+
+  stream.innerHTML = "";
+  let lastDay = "";
+  // 同一件事只挂一张事项卡。这件事可能有好几轮系统回复
+  // （补对象、重新协商、确认），每轮都挂卡就会在手机上叠出一模一样的好几张。
+  const cardShown = {};
+  for(const turn of data.turns){
+    const day = (turn.created_at || "").slice(0, 10);
+    if(day && day !== lastDay){
+      lastDay = day;
+      const mark = document.createElement("div");
+      mark.className = "daymark";
+      mark.textContent = day;
+      stream.appendChild(mark);
+    }
+    if(turn.role === "user"){
+      stream.appendChild(bubble("me", turn.text));
+    }else{
+      stream.appendChild(bubble("pa", turn.text));
+      if(turn.task_id && mattersById[turn.task_id] && !cardShown[turn.task_id]){
+        cardShown[turn.task_id] = true;
+        const wrap = document.createElement("div");
+        wrap.className = "msg pa";
+        wrap.style.maxWidth = "100%";
+        wrap.innerHTML = matterCard(mattersById[turn.task_id], null);
+        stream.appendChild(wrap);
+      }
+      if(turn.plan_id && !cardShown['plan:' + turn.plan_id]){
+        cardShown['plan:' + turn.plan_id] = true;
+        const wrap = document.createElement("div");
+        wrap.className = "msg pa";
+        wrap.innerHTML = '<button class="btn ghost" data-act="open-plan" data-plan="'
+          + esc(turn.plan_id) + '">打开这件事</button>';
+        stream.appendChild(wrap);
+      }
+    }
+  }
+  if(!data.turns.length){
+    const el = document.createElement("div");
+    el.className = "msg pa";
+    el.innerHTML = '<div class="bubble">你好，我是你的小助手。我记得你关心的人和往来，'
+      + '你交代的事我会去和对方商量。<br><br>试试下面这句，或者直接跟我说。</div>';
+    stream.appendChild(el);
+  }
+  stream.scrollTop = stream.scrollHeight;
+}
+
+/* ---------- 首屏「需要你处理」 ----------
+   数据全部来自 /api/matters 与 /api/plans 的真实状态，不自己造待办。
+   挑出来的只有两类：还没办完的事，以及正等本人动手的那一件。
+   已经登记模拟订单、已经谈崩的事不进来——它们不是「要处理」，
+   摆在首屏会让用户以为还得再做一次。
+
+   一件事怎么显示，看它当前真实状态：
+   blocked 说要补什么，agreed 说等本人确认，counter_pending 说对方提了新方案，
+   needs_renegotiation 说哪条记录变了。未回应不等于同意，所以文案说「还在等谁」，
+   不写成已约好。 */
+const TODO_STAGES = ["blocked", "agreed", "counter_pending", "needs_renegotiation",
+                     "negotiating", "created"];
+
+function todoWhy(m){
+  // 每条都说清「为什么现在轮到你看」，不是重复一遍状态名。
+  if(m.stage === "blocked"){
+    return "要补一句：" + (m.outcome || "送礼对象");
+  }
+  if(m.stage === "agreed"){
+    return "对方接受了，等你确认";
+  }
+  if(m.stage === "counter_pending"){
+    return "对方提了个新方案，要你定";
+  }
+  if(m.stage === "needs_renegotiation"){
+    return m.outcome || "有条记录刚被更正，方案要重排";
+  }
+  if(m.stage === "negotiating"){
+    return "正在和对方核实";
+  }
+  return "刚记下，还没开始办";
+}
+
+function todoAction(m){
+  // 点进去之后落到哪一步，按状态给一句准话。用「打开」这种笼统说法，
+  // 用户不知道点完会看到什么。
+  if(m.stage === "blocked") return "点一个对象就能接着办";
+  if(m.stage === "agreed") return "点开确认登记";
+  if(m.stage === "counter_pending") return "点开看看对方提的方案";
+  if(m.stage === "needs_renegotiation") return "点开按新记录重新协商";
+  return "点开接着办";
+}
+
+function renderTodo(matters, plans){
+  const box = $("todo");
+  if(!box) return;
+  const open = (matters || []).filter((m) => TODO_STAGES.indexOf(m.stage) >= 0);
+  const openPlans = (plans || []).filter((p) => !p.agreed);
+  if(!open.length && !openPlans.length){
+    box.innerHTML = "";
+    box.classList.remove("has");
+    return;
+  }
+  let h = '<div class="todo-head"><b>需要你处理</b>'
+    + '<span class="n">' + (open.length + openPlans.length) + ' 件未完</span></div>';
+  // 等本人动手的排前面：blocked / agreed / counter_pending / needs_renegotiation
+  // 都在等人，negotiating 和 created 是系统在办，用户看一眼就行。
+  const mine = ["blocked", "agreed", "counter_pending", "needs_renegotiation"];
+  const rank = (m) => (mine.indexOf(m.stage) >= 0 ? 0 : 1);
+  const sorted = open.slice().sort((a, b) => rank(a) - rank(b));
+  for(const m of sorted){
+    const st = stageText(m.stage);
+    h += '<button class="todo-item" data-open-task="' + esc(m.task_id) + '">'
+      + '<div class="t">' + esc(m.utterance.length > 24
+          ? m.utterance.slice(0, 24) + "…" : m.utterance) + '</div>'
+      + '<div class="why">' + esc(todoWhy(m)) + '</div>'
+      + '<div class="st state ' + st.cls + '"><span class="dot"></span>'
+      + esc(todoAction(m)) + '</div></button>';
+  }
+  for(const p of openPlans){
+    const tag = p.needs_replan ? "有条件变了，要重排"
+      : "还在等：" + (p.waiting_on || []).join("、");
+    h += '<button class="todo-item" data-open-plan="' + esc(p.plan_id) + '">'
+      + '<div class="t">' + esc(p.title.length > 24
+          ? p.title.slice(0, 24) + "…" : p.title) + '</div>'
+      + '<div class="why">' + esc(tag) + '</div>'
+      + '<div class="st state wait"><span class="dot"></span>'
+      + '点开看各家进度</div></button>';
+  }
+  box.innerHTML = h;
+  box.classList.add("has");
+}
+
+async function renderSide(){
+  // 和 renderStream 一样：取不到要给一句人话，不能整块静默不动。
+  let mattersData, ov;
+  try{
+    [mattersData, ov] = await Promise.all([
+      api("/api/matters"),
+      api("/api/overview"),
+    ]);
+  }catch(err){
+    const mh = $("side-matters");
+    if(mh) mh.innerHTML = '<div class="notice">这个身份的内容没取到：'
+      + esc(err.message) + '</div>';
+    const wh = $("side-waiting");
+    if(wh) wh.innerHTML = "";
+    return;
+  }
+  const mh = $("side-matters");
+  mh.innerHTML = mattersData.matters.length
+    ? mattersData.matters.map((m) => {
+        const st = stageText(m.stage);
+        return '<button class="matter-item" data-open-task="' + esc(m.task_id) + '">'
+          + '<div>' + esc(m.utterance.length > 20 ? m.utterance.slice(0, 20) + "…" : m.utterance)
+          + '</div><div class="st state ' + st.cls + '">' + esc(st.t) + '</div></button>';
+      }).join("")
+    : '<div class="notice">还没有事项。跟我说一句话就行。</div>';
+
+  // 在等的事单独一块。未回应不是同意，也不能显示成已经约好，
+  // 所以这里只说清「在等谁、等什么、从什么时候开始等、现在能做什么」。
+  const waiting = mattersData.waiting || [];
+  const wh = $("side-waiting");
+  wh.innerHTML = waiting.length
+    ? waiting.map((w) => {
+        const who = w.kind === "awaiting_person" ? "等对方本人"
+          : w.kind === "awaiting_model" ? "等模型调通"
+          : w.kind === "awaiting_my_decision" ? "等你定" : "等对方回复";
+        const since = (w.since || "").slice(0, 16).replace("T", " ");
+        return '<div class="wait-item" data-open-task="' + esc(w.task_id) + '">'
+          + '<div class="w-k"><span class="state wait"><span class="dot"></span>'
+          + esc(who) + '</span><span class="w-since">' + esc(since) + ' 起</span></div>'
+          + '<div class="w-q">' + esc(w.question) + '</div></div>';
+      }).join("")
+    : '<div class="notice">没有在等的事。</div>';
+
+  // 找人：先给一个搜索框，再按分组列出。分组可以重叠，
+  // 同一个人出现在多个组里是同一个记录，不是多份档案。
+  lastPersons = ov.persons || [];
+  const mine = lastPersons.filter((p) => p.owner_id === ownerId && p.name !== "我");
+  let h = '<input type="search" id="person-search" placeholder="搜姓名、别名、关系或职业"'
+        + ' style="width:100%;box-sizing:border-box;padding:8px 10px;margin-bottom:10px;'
+        + 'border:1px solid var(--line);border-radius:var(--radius-s);'
+        + 'background:var(--surface);font-size:13px">';
+  if(!mine.length){
+    h += '<div class="notice">还没有记录人物。</div>';
+  }else{
+    h += '<div id="person-chips">'
+        + mine.map(personChip).join("")
+        + '</div><div id="person-groups"></div>';
+  }
+  $("side-persons").innerHTML = h;
+  const box = $("person-search");
+  if(box){
+    box.addEventListener("input", () => renderPersonSearch(box.value, mine));
+  }
+  renderPersonGroups(mine);
+  // 共同事项和送礼事项并列展示：一个家庭要一起定的事，
+  // 状态口径和送礼一致——未回复不是同意，也不能显示成已约好。
+  // 必须 await：renderSidePlans 里面才发 /api/plans 并把结果写进 lastPlans。
+  // 不 await 时 renderTodo 拿到的还是上一次的空数组，首屏那一块永远只有
+  // 送礼事项——「两个家庭周末去公园」这类共同事项就这么不见了，
+  // 而侧栏里它是有的，两处不一致。
+  await renderSidePlans();
+  // 首屏那一块和侧栏读同一份 matters，不另外发请求：
+  // 两份数据必须一致，各取一次只会有先后差。
+  renderTodo(mattersData.matters, lastPlans);
+}
+
+/* ---------- 共同事项：多个家庭一起定一次活动 ---------- */
+const PLAN_STAGE_TEXT = {
+  draft:   {t: "还没开始", cls: "neutral"},
+  awaiting:{t: "还在等各家确认", cls: "wait"},
+  agreed:  {t: "各方已约定", cls: "ok"},
+};
+const PLAN_DECISION_TEXT = {
+  accept: "已接受", reject: "不接受", counter: "提了修改意见",
+  pending: "还没回复", stale: "接受的是旧版本，已失效",
+};
+const planDecisionText = (d) => PLAN_DECISION_TEXT[d] || d || "还没回复";
+// 表态来源和结论分开写：本人点的和这一方代表审阅出来的都只代表这一方，
+// 但「代表说可以」不能显示成本人已确认。
+const planDecisionSourceText = (dec) =>
+   dec && dec.decided_by === "representative" ? "代表审阅" : "本人确认";
+
+async function renderSidePlans(){
+  let data;
+  try{
+    data = await api("/api/plans");
+  }catch(e){
+    $("side-plans").innerHTML = '<div class="notice">共同事项暂时没取到。</div>';
+    return;
+  }
+  const plans = data.plans || [];
+  // 首屏那一块和侧栏共用这份数据：各取一次会有先后差，
+  // 侧栏刚刷新、首屏还是旧列表，用户会看到两处不一致。
+  lastPlans = plans;
+  $("side-plans").innerHTML = plans.length
+    ? plans.map((p) => {
+        const st = PLAN_STAGE_TEXT[p.stage] || {t: p.stage, cls: "neutral"};
+        const tag = p.needs_replan ? "有条件变了，要重排"
+          : (p.agreed ? st.t : "还在等：" + (p.waiting_on || []).join("、"));
+        return '<button class="matter-item" data-open-plan="' + esc(p.plan_id) + '">'
+          + '<div>' + esc(p.title.length > 20 ? p.title.slice(0, 20) + "…" : p.title) + '</div>'
+          + '<div class="st state ' + st.cls + '">' + esc(tag) + '</div></button>';
+      }).join("")
+    : '<div class="notice">还没有共同事项。</div>';
+}
+
+/* ---------- 人物搜索与分组 ---------- */
+function personChip(p){
+  return '<button class="chip btn-chip" data-person="' + esc(p.person_id) + '"'
+    + ' title="' + esc(p.note || "") + '">' + esc(p.name) + '</button>';
+}
+
+// 按输入过滤。搜不到就说搜不到，不猜相似的人。
+function renderPersonSearch(query, mine){
+  const box = $("person-chips");
+  if(!box) return;
+  const q = (query || "").trim();
+  const hit = q
+    ? mine.filter((p) => {
+        const hay = [p.name, p.relation, p.note]
+          .concat(p.aliases || [])
+          .concat(Object.keys(p.attributes || {}).map((k) => k + p.attributes[k]))
+          .join(" ");
+        return hay.indexOf(q) >= 0;
+      })
+    : mine;
+  box.innerHTML = hit.length
+    ? hit.map(personChip).join("")
+    : '<div class="notice">没找到叫「' + esc(q) + '」的人。'
+      + '可以换个说法，或者直接在对话里告诉我这个人是谁。</div>';
+  renderPersonGroups(hit);
+}
+
+// 按分组列出。一个人可以同时在多个组里，各组人数会重叠，
+// 所以这里不做「共 N 人」这种会把重叠人数加错的统计。
+const GROUP_ORDER = ["家人与亲属", "朋友与同学", "工作与业务", "社区与兴趣",
+                     "生活服务", "未分组"];
+function renderPersonGroups(persons){
+  const box = $("person-groups");
+  if(!box) return;
+  const buckets = {};
+  for(const p of persons){
+    const gs = (p.groups && p.groups.length) ? p.groups : ["未分组"];
+    for(const g of gs){
+      (buckets[g] = buckets[g] || []).push(p);
+    }
+  }
+  const named = GROUP_ORDER.filter((g) => buckets[g] && buckets[g].length);
+  box.innerHTML = named.map((g) =>
+    '<div style="margin-top:12px"><div style="font-size:12px;color:var(--ink-3);'
+    + 'margin-bottom:6px">' + esc(g) + '</div>'
+    + buckets[g].map(personChip).join("") + '</div>').join("");
+}
+
+/* ---------- 发送 ---------- */
+const input = $("input");
+const sendBtn = $("send");
+
+input.addEventListener("input", () => {
+  sendBtn.disabled = !input.value.trim() || busy;
+  input.style.height = "auto";
+  input.style.height = Math.min(input.scrollHeight, 132) + "px";
+});
+
+$("composer").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const text = input.value.trim();
+  if(!text || busy) return;
+  send(text);
+});
+
+// opts.fromPreset：这句话来自横栏上的预设 prompt，不是用户手打的。
+// 失败时「把手打的字还回去」是对的——用户不想重敲；
+// 但预设句还回去就是 bug：用户已经看到它发出去了，输入框又出现同一段，
+// 会以为没发成功，再点一次就把同一件事办了两次。
+async function send(text, opts){
+  busy = true;
+  sendBtn.disabled = true;
+  const draft = text;
+  const fromPreset = !!(opts && opts.fromPreset);
+  input.value = "";
+  input.style.height = "auto";
+  stream.appendChild(bubble("me", draft));
+  stream.scrollTop = stream.scrollHeight;
+
+  const thinking = bubble("pa", "正在想…");
+  thinking.querySelector(".bubble").style.opacity = ".6";
+  stream.appendChild(thinking);
+  setStatus("正在处理…");
+
+  try{
+    // 先分清这句话是交办、补充纠正，还是问进展。
+    const said = await post("/api/say", {utterance: draft});
+    if(said.kind === "record"){
+      thinking.querySelector(".bubble").textContent = said.reply;
+      await renderStream();
+      await renderSide();
+      return;
+    }
+    if(said.kind === "status"){
+      thinking.querySelector(".bubble").textContent = said.reply;
+      await renderStream();
+      await renderSide();
+      return;
+    }
+    if(said.kind === "followup"){
+      // 已登记订单后的后续反馈：记到那条送礼记录上，让这件事有下文。
+      thinking.querySelector(".bubble").textContent = said.reply;
+      await renderStream();
+      await renderSide();
+      return;
+    }
+    if(said.kind === "family_update"){
+      // 问家人近况。这里必须自己收尾并返回：漏了这个分支，问近况会掉进
+      // 下面的交办分支，said.extracted 是 undefined，页面直接报
+      // 「Cannot read properties of undefined」——用户看到的是一次莫名崩溃。
+      thinking.querySelector(".bubble").textContent = said.reply;
+      await renderStream();
+      await renderSide();
+      return;
+    }
+    if(said.kind === "group_activity"){
+      // 多家庭活动：这句话已经变成一件家庭活动草稿，不开礼物、
+      // 也不要求点一个孩子。逐行显示，最后给一个能点开的入口——
+      // 用户要知道这件事现在在哪、下一步干什么。
+      const lines = String(said.reply || "").split("\n");
+      thinking.querySelector(".bubble").textContent = lines[0] || "";
+      for(let i = 1; i < lines.length; i++){
+        const row = document.createElement("div");
+        row.className = "row them";
+        row.textContent = lines[i];
+        stream.appendChild(row);
+      }
+      const box = document.createElement("div");
+      box.className = "matter";
+      let h = '<div style="font-size:12.5px;color:var(--ink-3);margin-bottom:8px">'
+         + '这件事已经记下，缺口留在同一件事里</div><div>';
+      h += '<button class="chip btn-chip" data-act="open-plan" data-plan="'
+         + esc(said.plan_id) + '">打开这件事</button>';
+      if(said.missing_families){
+        h += ' <span class="src">还有 ' + esc(said.missing_families)
+           + ' 家没有记录，先留着待确认</span>';
+      }
+      h += '</div></div>';
+      box.innerHTML = h;
+      stream.appendChild(box);
+      stream.scrollTop = stream.scrollHeight;
+      await renderStream();
+      await renderSidePlans();
+      return;
+    }
+    if(said.kind === "clarify"){
+      // 用户在问「要补什么」。给出具体缺口，并把候选人名做成可点按钮，
+      // 点一下就等于补上对象，不用自己想该怎么说。
+      thinking.querySelector(".bubble").textContent = said.reply;
+      const cands = (said.candidates || []);
+      if(cands.length){
+        const box = document.createElement("div");
+        box.className = "msg pa";
+        box.style.maxWidth = "100%";
+        let h = '<div class="matter"><div style="font-size:12.5px;color:var(--ink-3);'
+          + 'margin-bottom:8px">点一个就行</div><div>';
+        for(const c of cands){
+          h += '<button class="chip btn-chip" data-act="pick-subject" data-task="'
+             + esc(said.task_id) + '" data-person="' + esc(c.person_id) + '">'
+             + esc(c.name) + (c.relation ? " · " + esc(relationText(c.relation)) : "")
+             + '</button>';
+        }
+        h += '</div></div>';
+        box.innerHTML = h;
+        stream.appendChild(box);
+      }
+      stream.scrollTop = stream.scrollHeight;
+      return;
+    }
+
+    const t = {task_id: said.task_id, extracted: said.extracted};
+    const ex = t.extracted;
+    // 同一句重复交办时复用原任务，告诉用户接着原来那件事办。
+    let reply = said.reused ? "这事我记着呢，接着原来那件办。" : "好，我去办。";
+    if(said.reused){
+      // 复用任务：缺口和状态由事项卡说，这里不重复推断。
+    }else if(ex.subject_resolved_name){
+      reply = "明白，给" + ex.subject_resolved_name + "准备礼物"
+        + (ex.budget_max != null ? "，预算 " + ex.budget_max + " 元" : "") + "。";
+    }else if(ex.ambiguous_subject){
+      reply = "我先看看你认识谁。";
+    }
+    thinking.querySelector(".bubble").textContent = reply;
+
+    setStatus(said.reused || ex.ambiguous_subject
+      ? "正在确认送礼对象…" : "正在和对方助理核实…");
+    const res = await post("/api/task/advance", {task_id: t.task_id});
+    if(res.stage === "agreed"){
+      thinking.querySelector(".bubble").textContent = "对方接受了，等你确认。";
+    }else if(res.stage === "counter_pending"){
+      thinking.querySelector(".bubble").textContent = "对方提了个新方案，你看看行不行。";
+    }else if(res.stage === "blocked"){
+      // 缺什么、能点谁，都由事项卡说清楚，这里只做一句过渡。
+      thinking.querySelector(".bubble").textContent = res.outcome || "我还缺一点信息。";
+    }else if(res.stage === "model_failed"){
+      thinking.querySelector(".bubble").textContent = "刚才没连上：" + (res.outcome || "");
+    }else{
+      thinking.querySelector(".bubble").textContent = res.outcome || "暂时没办成。";
+    }
+    await renderStream();
+    await renderSide();
+  }catch(err){
+    // 预设句失败时不能再说「我留着，可以再发一次」：横栏上那条已经被移除，
+    // 输入框也是空的（预设句不回填），用户翻遍界面也找不到能再点一次的东西。
+    // 照原样发回去又会在输入框里留下一句他以为自己已经说出去的话，
+    // 下一次误触就把同一件事办两遍。这里把原句放回横栏，
+    // 让他还有一条能点的路，话也说清是哪里出了问题。
+    if(fromPreset){
+      // 条目已经从横栏消失，这里不把它塞回去。重发的按钮直接放在这条
+      // 失败回复里：点一下就用原句重发，不用回输入框重打一遍。
+      // 消息文本要转义，err.message 可能带尖括号；按钮是另建的，不参与转义。
+      thinking.querySelector(".bubble").innerHTML =
+        '<div>' + esc("这句话没发出去：" + err.message) + '</div>'
+        + '<button type="button" class="chip btn-chip" data-act="resend-preset"'
+        + ' data-text="' + esc(draft) + '" style="margin-top:8px">再发一次</button>';
+    }else{
+      thinking.querySelector(".bubble").textContent = "出了点问题：" + err.message
+        + "。你刚才说的我留着，可以再发一次。";
+    }
+    if(!fromPreset){
+      input.value = draft;
+    }
+    sendBtn.disabled = false;
+  }finally{
+    busy = false;
+    sendBtn.disabled = !input.value.trim();
+    setStatus("准备就绪");
+  }
+}
+
+function setStatus(t){ $("status-line").textContent = t; }
+
+/* ---------- 卡片内动作 ---------- */
+// 卡片既渲染在消息流里，也渲染在协商详情弹层里（openTaskSheet 复用同一张卡）。
+// 之前只有消息流挂了动作监听，弹层里的按钮看着能点、实际全是死的：
+// 「查看协商详情」点开弹层后，里面又出现一个它自己，点了自然没反应。
+// 现在动作处理抽成一个函数，两处都挂，弹层里的确认、重试、换商品、
+// 订单推进都走同一条路，不会出现看得见点不动的按钮。
+async function runCardAction(act, btn, taskId){
+  if(!btn || busy) return;
+  if(act === "focus-input"){ input.focus(); return; }
+  if(act === "open-plan"){ await openPlan(btn.dataset.plan); return; }
+  // 把误当成送礼的旧事项改成家庭活动。旧事项不删，服务端只把它标成
+  // 已转走并记下新事项 id；这里直接打开新的那一件，用户接着办。
+  if(act === "to-group-activity"){
+    btn.disabled = true;
+    btn.textContent = "正在改成家庭活动…";
+    setStatus("正在改成家庭活动…");
+    try{
+      const out = await post("/api/task/" + taskId + "/to-group-activity", {});
+      await openPlan(out.plan_id);
+      setStatus("已经改成家庭活动，原来的记录还在");
+    }catch(err){
+      btn.disabled = false;
+      btn.textContent = "改成家庭活动";
+      setStatus("没改成：" + (err.message || "请稍后再试"));
+    }
+    return;
+  }
+  // 换候选商品：服务端会重跑预算、重复、品类和尺码检查，
+  // 不通过就原样不动，页面把服务端的原因显示出来。
+  // 点候选商品是看详情，不是直接换。详情里有逐项检查结果和「换成这件」按钮。
+  // 之前这里是点了就换，误点一下正在买的东西就变了，来不及反应。
+  if(act === "view-product"){
+    setStatus("正在看这件…");
+    try{
+      const d = await api("/api/product/" + btn.dataset.product
+        + "?task_id=" + taskId);
+      openProductSheet(d, taskId);
+    }catch(err){
+      setStatus("没打开：" + err.message);
+      return;
+    }
+    setStatus("准备就绪");
+    return;
+  }
+  // 详情里点「换成这件」才真正换，仍要走服务端硬条件检查。
+  if(act === "choose"){
+    busy = true;
+    btn.classList.add("loading"); btn.disabled = true;
+    setStatus("正在换商品…");
+    // 服务端换完会自己再推一轮协商，并把下一步该点什么一起返回。
+    // 界面直接用这句，不要自己另编一句：自己编的那句和卡片状态对不上，
+    // 用户读完还是不知道该打字还是点按钮。
+    try{
+      const res = await post("/api/task/choose-candidate", {
+        task_id: taskId, product_id: btn.dataset.product,
+      });
+      $("sheet").classList.remove("open");
+      await renderStream();
+      await renderSide();
+      setStatus(res.next_hint || "已换成这件");
+    }catch(err){
+      setStatus("没能换成这件：" + err.message);
+      btn.classList.remove("loading"); btn.disabled = false;
+    }finally{
+      busy = false;
+      setStatus("准备就绪");
+    }
+    return;
+  }
+  // 订单下一步：支付、发货、送达。按顺序走，服务端挡回乱序。
+  if(act === "order-pay" || act === "order-ship" || act === "order-deliver"){
+    busy = true;
+    btn.classList.add("loading"); btn.disabled = true;
+    setStatus("正在推进…");
+    try{
+      await post("/api/order/advance", {
+        task_id: taskId, order_id: btn.dataset.order,
+        action: act.slice("order-".length),
+      });
+      await renderStream();
+      await renderSide();
+      setStatus("已更新");
+    }catch(err){
+      setStatus("没能推进：" + err.message);
+      btn.classList.remove("loading"); btn.disabled = false;
+    }finally{
+      busy = false;
+      setStatus("准备就绪");
+    }
+    return;
+  }
+  if(act === "view-detail"){
+    // 打开真实协商详情：实际交换的提案、问题、回复与当前版本。
+    // 数据来自 /api/task/{id}，不是页面现编的剧情。
+    setStatus("打开协商详情…");
+    try{
+      const d = await api("/api/task/" + taskId);
+      currentTask = d;
+      openTaskSheet(d);
+    }catch(err){
+      setStatus("没打开：" + err.message);
+      return;
+    }
+    setStatus("准备就绪");
+    return;
+  }
+  // 代填回执：插件实际填了什么、服务端复核结果是什么，逐字段摊开。
+  // 只显示 status 不够——本人看不到依据，就无法判断这个「verified」
+  // 是不是自己眼前这一页填出来的。
+  if(act === "view-receipts"){
+    setStatus("正在读代填回执…");
+    try{
+      const d = await api("/api/task/" + taskId + "/receipts");
+      openReceiptSheet(taskId, d.receipts || []);
+    }catch(err){
+      setStatus("没读到回执：" + err.message);
+      return;
+    }
+    setStatus("准备就绪");
+    return;
+  }
+  if(act === "pick-subject"){
+    busy = true;
+    btn.classList.add("loading"); btn.disabled = true;
+    setStatus("记下对象，继续办…");
+    try{
+      await post("/api/task/resolve-subject", {
+        task_id: taskId, person_id: btn.dataset.person,
+      });
+      const res = await post("/api/task/advance", {task_id: taskId});
+      await renderStream();
+      await renderSide();
+      setStatus(stageText(res.stage).t);
+    }catch(err){
+      setStatus("没接上：" + err.message);
+      btn.classList.remove("loading"); btn.disabled = false;
+    }finally{
+      busy = false;
+      setStatus("准备就绪");
+    }
+    return;
+  }
+  if(act === "retry" || act === "renegotiate"){
+    busy = true; btn.classList.add("loading"); btn.disabled = true;
+    setStatus(act === "renegotiate" ? "按新记录重新协商…" : "再试一次…");
+    try{
+      const res = await post("/api/task/advance", {task_id: taskId});
+      // 重新协商的结果要落到对话流里，用户在手机上就能看到新方案，
+      // 不需要去别处找。被拒绝时同样如实显示原因。
+      const reply = res.stage === "blocked"
+        ? (res.outcome || "还缺一点信息。")
+        : res.stage === "agreed" ? "重新协商好了，对方接受新方案，等你确认。"
+        : res.stage === "counter_pending"
+          ? "对方提了个新方案：" + (res.reason || "") + "你看看行不行。"
+        : res.stage === "model_failed" ? "刚才没连上模型，可以再试一次。"
+        : (res.outcome || "还没协商成。");
+      const wrap = document.createElement("div");
+      wrap.className = "msg pa";
+      wrap.innerHTML = '<div class="bubble">' + esc(reply) + '</div>';
+      stream.appendChild(wrap);
+      stream.scrollTop = stream.scrollHeight;
+      await renderStream();
+      await renderSide();
+      setStatus(stageText(res.stage).t);
+    }catch(err){
+      setStatus("重试失败：" + err.message);
+    }finally{
+      busy = false; btn.classList.remove("loading"); btn.disabled = false;
+      setStatus("准备就绪");
+    }
+    return;
+  }
+  if(act === "confirm" || act === "accept-confirm"){
+    busy = true;
+    btn.classList.add("loading"); btn.disabled = true;
+    setStatus("正在登记…");
+    try{
+      const order = await post("/api/confirm", {
+        task_id: taskId,
+        proposal_id: btn.dataset.prop,
+        accept_counter: act === "accept-confirm",
+      });
+      await renderStream();
+      await renderSide();
+      setStatus(order.duplicate ? "已经是这个订单了" : "模拟订单已登记");
+      // 登记不是终点：告诉用户接下来可以说什么，对话才接得上。
+      if(!order.duplicate){
+        const tip = document.createElement("div");
+        tip.className = "msg pa";
+        tip.innerHTML = '<div class="bubble">已经记下了。等礼物送出去，你可以跟我说一声'
+          + '「送到了，孩子很喜欢」，我会把它记到这个人的名下，'
+          + '下次准备礼物时一起考虑。</div>';
+        stream.appendChild(tip);
+        stream.scrollTop = stream.scrollHeight;
+      }
+    }catch(err){
+      setStatus("没登记成功：" + err.message);
+      btn.classList.remove("loading"); btn.disabled = false;
+    }finally{
+      busy = false;
+      setStatus("准备就绪");
+    }
+  }
+}
+
+// 消息流和协商详情弹层都挂同一套卡片动作。
+// 弹层里的卡片点「确认购买」「换成这件」「支付」要真的有用，
+// 不能只是摆着好看；两处都走 runCardAction，行为完全一致。
+// 消息流和协商详情弹层都挂同一套卡片动作。
+// 弹层里的卡片点「确认购买」「换成这件」「支付」要真的有用，
+// 不能只是摆着好看；两处都走 runCardAction，行为完全一致。
+stream.addEventListener("click", async (e) => {
+  // 预设句失败后的「再发一次」：用原句重发，不需要回输入框重打。
+  // 这里直接吃掉并返回，不要再往 runCardAction 传——那边只认事项卡上的动作。
+  // 保存资料后那句「要用于哪件事」。点一下就把这条资料明确挂到那件事上，
+  // 协商上下文随后会真的拿到它（见 agents._a_context 的 linked_notes）。
+  // 挂完把整排按钮收掉，只留一句结果：留着它们，用户会以为还能再挂一次，
+  // 反复点同一件事。
+  const linkBtn = e.target.closest("[data-note-link-task]");
+  if(linkBtn){
+    if(busy) return;
+    const box = $("note-link-box");
+    const eventId = linkBtn.dataset.noteLinkEvent || "";
+    const taskId = linkBtn.dataset.noteLinkTask || "";
+    if(!eventId || !taskId) return;
+    busy = true;
+    linkBtn.disabled = true;
+    linkBtn.textContent = "正在关联…";
+    setStatus("正在把这条资料用于这件事…");
+    try{
+      const r = await post("/api/note/link-task", {event_id: eventId, task_id: taskId});
+      if(box){
+        box.innerHTML = '<div style="font-size:12.5px;color:var(--ink-3)">'
+          + (r.created
+             ? "已经用于这件事。下次协商会用上它，事项详情里也能回看。"
+             : "这条资料已经用于这件事了。")
+          + '</div>';
+      }
+      setStatus(r.created ? "已用于这件事" : "这条资料已经用过了");
+      await renderStream();
+      await renderSide();
+    }catch(err){
+      setStatus("没能关联：" + err.message);
+      linkBtn.disabled = false;
+      linkBtn.textContent = "重试";
+    }finally{
+      busy = false;
+    }
+    return;
+  }
+  const resend = e.target.closest('button[data-act="resend-preset"]');
+  if(resend){
+    if(busy) return;
+    const text = resend.dataset.text || "";
+    if(!text) return;
+    // 点了就撤掉这个按钮：留着的话，重发再失败会叠第二个，
+    // 一层层套下去，气泡里全是同一个按钮。
+    if(resend.parentNode) resend.parentNode.removeChild(resend);
+    // 横栏条目早在这句发出时就没了，这里不再加回去：
+    // 用户要的是「发出去就从横栏消失」，失败也照样消失。
+    send(text, {fromPreset: true});
+    return;
+  }
+  const btn = e.target.closest("button[data-act]");
+  if(!btn) return;
+  runCardAction(btn.dataset.act, btn, btn.dataset.task);
+});
+
+/* ---------- 侧栏与人物详情 ---------- */
+$("btn-side").addEventListener("click", () => {
+  $("side").classList.add("open");
+  renderSide();
+});
+$("side-close").addEventListener("click", () => $("side").classList.remove("open"));
+
+$("side").addEventListener("click", async (e) => {
+  const personBtn = e.target.closest("[data-person]");
+  if(personBtn){ openPerson(personBtn.dataset.person); return; }
+  const planBtn = e.target.closest("[data-open-plan]");
+  if(planBtn){ openPlan(planBtn.dataset.openPlan); return; }
+  const taskBtn = e.target.closest("[data-open-task]");
+  if(taskBtn){
+    $("side").classList.remove("open");
+    const card = stream.querySelector('[data-task="' + taskBtn.dataset.openTask + '"]');
+    if(card){ card.scrollIntoView({behavior: "smooth", block: "center"}); }
+    else{
+      const d = await api("/api/task/" + taskBtn.dataset.openTask);
+      currentTask = d;
+      openTaskSheet(d);
+    }
+  }
+});
+
+/* 首屏「需要你处理」点开同一件事。
+   行为和侧栏一致：消息流里已经有这张卡就滚过去，没有才拉详情。
+   单独挂一个监听，因为侧栏那个挂在 #side 上，首屏这块点下去不会有反应——
+   用户看到的是「有一件未完事项、却点不开」。 */
+$("todo").addEventListener("click", async (e) => {
+  const planBtn = e.target.closest("[data-open-plan]");
+  if(planBtn){ openPlan(planBtn.dataset.openPlan); return; }
+  const taskBtn = e.target.closest("[data-open-task]");
+  if(!taskBtn) return;
+  const card = stream.querySelector('[data-task="' + taskBtn.dataset.openTask + '"]');
+  if(card){ card.scrollIntoView({behavior: "smooth", block: "center"}); return; }
+  try{
+    const d = await api("/api/task/" + taskBtn.dataset.openTask);
+    currentTask = d;
+    openTaskSheet(d);
+  }catch(err){
+    setStatus("这件事没打开：" + err.message);
+  }
+});
+
+// 压栈只在这里做。fromChain=true 表示这是从关系链/返回按钮点进来的，
+// 沿着已有路径往下走；否则（侧栏、澄清按钮）当新的起点，清掉旧路径。
+async function openPlan(planId){
+  /* 共同事项详情：点开能看到真实交换与各家状态。
+
+     这里只呈现各方自己授权给出的条件、每一版方案和各家对每版的表态，
+     不替任何一方补条件，也不把「还没回复」显示成已约定。
+     本地演示用 A/B/C 三个身份、两个家庭（小周与配偶小林同家），
+     不是生产多用户认证。
+  */
+  const d = await api("/api/plan/" + planId);
+  const mine = (d.participants || []).filter((p) => p.owner_id === ownerId);
+  let h = '<h2 id="sheet-title">' + esc(d.title) + '</h2>';
+  h += '<div class="sub">' + esc(d.utterance || "") + '</div>';
+
+  // 当前状态：说清是约定、还在等谁，还是条件变了要重排。
+  const tag = d.needs_replan
+    ? "有条件变了，方案要重排"
+    : (d.agreed ? "各方已约定第 " + d.current_version + " 版"
+                : "还在等：" + (d.waiting_on || []).join("、"));
+  h += '<div style="margin:10px 0 4px"><span class="state '
+     + (d.agreed ? "ok" : "wait") + '"><span class="dot"></span>' + esc(tag) + '</span></div>';
+  if(d.outcome) h += '<div class="sub" style="margin-bottom:10px">' + esc(d.outcome) + '</div>';
+
+  // 当前这版方案。
+  if(d.proposal){
+    h += '<section><h4>第 ' + esc(d.current_version) + ' 版方案</h4><div class="kv">';
+    for(const k of Object.keys(d.proposal)){
+      h += '<div class="item"><span class="k">' + esc(k) + '</span><span class="v">'
+         + esc(d.proposal[k]) + '</span></div>';
+    }
+    h += '</div>';
+    if(d.proposal_reason) h += '<div class="sub" style="margin-top:8px">'
+       + esc(d.proposal_reason) + '</div></section>';
+    else h += '</section>';
+  }else{
+    h += '<section><div class="notice">还没有方案版本。</div></section>';
+  }
+
+  // 目标与缺口：用户说了几家、还缺几家、哪些孩子说来说不来。
+  // 这些是持久化在事项上的事实，刷新、从别处跟进都还在——
+  // 少了这一段，一件事刷新后又变回「只有一个发起方的空草稿」。
+  const want = d.requested_families || 0;
+  if(want){
+    const known = (d.participants || []).length;
+    h += '<section><h4>这件事要几家</h4><div class="kv">'
+       + '<div class="item"><span class="k">目标</span><span class="v">'
+       + esc(want) + ' 家</span></div>'
+       + '<div class="item"><span class="k">已选进事项</span><span class="v">'
+       + esc(known) + ' 家（候选，等各家自己确认参与）</span></div>'
+       + '<div class="item"><span class="k">还没有记录的</span><span class="v">'
+       + esc(d.unknown_families || 0) + ' 家，先留着待确认，不拿认识的人凑数'
+       + '</span></div></div></section>';
+  }
+  const confirmationGaps = (d.plan_status && d.plan_status.confirmation_gaps)
+    || d.confirmation_gaps || [];
+  if(confirmationGaps.length){
+    h += '<div class="notice" role="status">还有参与或出席待确认：'
+      + confirmationGaps.map((gap) => esc(typeof gap === "string" ? gap : (gap.label || gap.reason || "待相关本人确认"))).join('；')
+      + '。候选不是已参加，也不是各家都已同意。</div>';
+  }
+  const att = d.child_attendance || {};
+  const attKeys = Object.keys(att);
+  if(attKeys.length){
+    h += '<section><h4>孩子出席</h4><div class="kv">';
+    for(const k of attKeys){
+      const nm = ((d.families || []).reduce(
+        (acc, f) => acc.concat(f.children || []), []).filter((c) => c.person_id === k)[0] || {}).name || k;
+      h += '<div class="item"><span class="k">' + esc(nm) + '</span><span class="v">'
+         + esc(att[k] === "coming" ? "来" : (att[k] === "not_coming" ? "不来" : att[k]))
+         + '</span></div>';
+    }
+    h += '</div></section>';
+  }
+
+  // 家庭与孩子：按已知关系推导的结果，界面照着显示，不自己编。
+  // 数不出孩子的家庭明说未知——不拿认识的人凑数，也不替别人答应。
+  if(d.families && d.families.length){
+    h += '<section><h4>家庭与孩子（按已记下的关系）</h4><div class="kv">';
+    for(const f of d.families){
+      const kids = (f.children || []).map((c) => c.name);
+      h += '<div class="item"><span class="k">' + esc(f.label) + '</span><span class="v">'
+         + (kids.length
+            ? esc(kids.join("、")) + ' <span class="src">' + esc(f.children_note || "") + '</span>'
+            : esc(f.children_note || "还没有能证明有几个孩子的关系记录"))
+         + '</span></div>';
+    }
+    h += '</div><div class="sub" style="margin-top:6px">'
+       + esc(d.family_note || "") + '</div></section>';
+  }
+
+  // 各家条件与状态。条件是哪一方给的，就归在哪一方名下。
+  h += '<section><h4>各家条件与状态</h4><div class="kv">';
+  for(const p of d.participants || []){
+    const conds = Object.keys(p.conditions || {}).map(
+      (k) => k + "：" + p.conditions[k]).join("；") || "还没给条件";
+    h += '<div class="item"><span class="k">' + esc(p.label)
+       + (p.required ? "" : "（可选）") + '</span><span class="v">'
+       + esc(conds) + '<br><span class="src">' + esc(planDecisionText(p.state))
+       + (p.reason ? " · " + esc(p.reason) : "") + '</span></span></div>';
+  }
+  h += '</div></section>';
+
+  // 真实交换：每一版是谁提的、各家对这版说了什么。
+  const versions = d.versions || [];
+  const decisions = d.decisions || [];
+  if(versions.length){
+    h += '<section><h4>实际交换</h4>';
+    for(const v of versions.slice().reverse()){
+      h += '<div class="row sys"><b>第 ' + esc(v.version) + ' 版</b>（'
+         + esc(v.proposer || "系统") + ' 提出）：';
+      const parts = Object.keys(v.content || {}).map((k) => k + " " + v.content[k]);
+      h += esc(parts.join("；"));
+      if(v.reason) h += '<br><span class="src">' + esc(v.reason) + '</span>';
+      h += '</div>';
+      for(const dec of decisions.filter((x) => x.version === v.version)){
+        h += '<div class="row them"><b>' + esc(dec.label) + '</b>：'
+           + esc(planDecisionText(dec.decision))
+           + ' · ' + esc(planDecisionSourceText(dec))
+           + (dec.reason ? " · " + esc(dec.reason) : "");
+        const changes = Object.keys(dec.changes || {});
+        if(changes.length){
+          h += '<br><span class="src">要求改：'
+             + esc(changes.map((k) => k + " 改为 " + dec.changes[k]).join("；")) + '</span>';
+        }
+        h += '</div>';
+      }
+    }
+    h += '</section>';
+  }
+
+  // 排第一版：只要本人这一方有条件就能排，别家还没给条件也先排，
+  // 缺的作为缺口留在方案里。没有这条路，一件事从原话进来之后
+  // 就只剩「改条件」一个按钮，永远停在草稿状态。
+  if(mine.length === 1 && d.current_version === 0){
+    h += '<section><h4>排第一版方案</h4>'
+       + '<div class="sub" style="margin-bottom:8px">按各家当前条件排一版；'
+       + '别家还没给条件也先排，缺的会作为缺口留在方案里，'
+       + '不会因为缺谁就卡住。</div>'
+       + '<button class="btn primary" data-plan-propose="' + esc(planId) + '">'
+       + '按当前条件排第一版</button></section>';
+  }
+
+  // 我这一方的操作：以本人身份表态，或改自己的条件。
+  if(mine.length === 1){
+    const p = mine[0];
+    // 改自己这一方的条件。只改本人这一家；改完事项进入待重排，
+    // 不等于接受当前方案。
+    h += '<section><h4>' + esc(p.label) + '自己的条件</h4>'
+       + '<div class="sub" style="margin-bottom:8px">只有' + esc(p.label)
+       + '本人能改自己这一方的条件。</div>'
+       + '<button class="btn ghost" data-plan-condition="' + esc(planId)
+       + '" data-plan-owner="' + esc(p.owner_id) + '" data-plan-conditions="'
+       + esc(JSON.stringify(p.conditions || {})) + '">改我的条件</button>'
+       + (d.needs_replan
+           ? ' <button class="btn primary" data-plan-replan="' + esc(planId) + '">'
+             + '按各家当前条件重排</button>'
+           : '')
+       + '</section>';
+    const canDecide = !d.needs_replan && d.current_version > 0 && p.state !== "accept";
+    if(canDecide){
+      h += '<section><h4>以' + esc(p.label) + '的身份确认</h4>'
+         + '<div class="sub" style="margin-bottom:8px">只有' + esc(p.label)
+         + '本人能对这一版表态。</div>'
+         + '<button class="btn primary" data-plan-decide="' + esc(planId)
+         + '" data-participant="' + esc(p.participant_id) + '" data-version="'
+         + esc(d.current_version) + '" data-decision="accept">接受这一版</button> '
+         + '<button class="btn ghost" data-plan-decide="' + esc(planId)
+         + '" data-participant="' + esc(p.participant_id) + '" data-version="'
+         + esc(d.current_version) + '" data-decision="reject">不接受</button></section>';
+      // 代表审阅和本人确认分开：审阅是模型按这一方的条件先看一遍，
+      // 结论只代表这一方，来源要写清楚，不能算成本人点击。
+      h += '<section><h4>让代表先看这一版</h4>'
+         + '<div class="sub" style="margin-bottom:8px">'
+         + '由' + esc(p.label) + '的个人代表按这一方的条件审阅，'
+         + '结论记作「代表审阅」，不是本人的确认。</div>'
+         + '<button class="btn ghost" data-plan-review="' + esc(planId)
+         + '" data-plan-owner="' + esc(p.owner_id) + '" data-plan-participant="'
+         + esc(p.participant_id) + '" data-plan-version="'
+         + esc(d.current_version) + '">让代表先看这一版</button></section>';
+    }else if(p.state === "accept" && !d.needs_replan){
+      h += '<section><div class="notice">你（' + esc(p.label)
+         + '）已接受当前版本。</div></section>';
+    }
+    if(d.needs_replan){
+      h += '<section><div class="notice">有条件刚更新，方案要重排后才能确认。'
+         + '重排会按各家当前条件出新版，各家再重新表态。'
+         + '重排失败可以重试，失败时不落新版本。</div></section>';
+    }
+  }
+
+  h += '<div class="notice" style="margin-top:14px">本地演示：A / B / C 是三个身份、'
+     + '两个家庭——小周和配偶小林是同一个家庭，不是生产多用户认证；'
+     + '不购买、不订票、不发真实群消息。</div>';
+  h += '<section id="plan-last-mile" data-plan="' + esc(planId) + '"><div class="sub">正在读取邀请与本人的资料来源…</div></section>';
+  h += '<button class="btn ghost" data-close-sheet style="margin-top:12px">返回对话</button>';
+  $("sheet-body").innerHTML = h;
+  $("sheet").classList.add("open");
+  renderSidePlans();
+  loadPlanLastMile(planId, d);
+}
+
+async function openPerson(personId, fromChain){
+  const d = await api("/api/person/" + personId);
+  const p = d.person;
+  // 从侧栏点进来时先收侧栏，避免手机上详情被压在侧栏后面。
+  $("side").classList.remove("open");
+  if(!fromChain) personStack = [personId];
+  else if(!personStack.length || personStack[personStack.length - 1] !== personId){
+    if(personStack.length >= 8) personStack.shift();
+    personStack.push(personId);
+  }
+  let h = '<h2 id="sheet-title">' + esc(p.name) + '</h2>';
+  h += '<div class="sub">' + esc(relationText(p.relation))
+     + (p.note ? " · " + esc(p.note) : "") + '</div>';
+
+  if(personStack.length > 1){
+    // 说清这是顺着关系链看下来的第几层，以及怎么回到上一层。
+    const depth = personStack.length;
+    h += '<div class="crumb"><button class="btn ghost" data-person-back>'
+       + '返回上一层（第 ' + (depth - 1) + ' 层）</button></div>';
+  }
+
+  if(d.related && d.related.length){
+    // 这排关系来自我自己的记录，不是对方维护的关系网。
+    // 标题和每个 chip 都要写清「我」是谁：从小林卡片点开小宇，
+    // 这一环读作「小宇是小林的儿子」，不是我的儿子。
+    // 说清归属，用户才不会把别人的孩子看成自己的。
+    h += '<section><h4>关系</h4>'
+       + '<div style="font-size:12.5px;color:var(--ink-3);margin-bottom:8px">'
+       + '这是我记下的「' + esc(p.name) + ' 和谁是什么关系」，'
+       + '不是' + esc(p.name) + '自己维护的关系网。'
+       + '每一环都按他的角度写，点开可以看那个人。</div><div>';
+    for(const r of d.related){
+      // 关系 chip 上补上归属：小宇 · 小林的儿子。
+      // 不写归属时「儿子」会被读成我的儿子。
+      const whose = (p.name === "我") ? "" : (p.name + "的");
+      h += '<button class="chip btn-chip" data-person="' + esc(r.person_id) + '"'
+         + ' title="查看 ' + esc(r.name) + '">'
+         + esc(r.name) + " · " + esc(whose + relationText(r.relation)) + '</button>';
+    }
+    h += '</div></section>';
+  }
+  const attrs = p.attributes || {};
+  if(Object.keys(attrs).length){
+    h += '<section><h4>基本情况</h4><div class="kv">';
+    for(const k of Object.keys(attrs)){
+      const v = attrs[k];
+      const shown = Array.isArray(v) ? v.join("、") : v;
+      h += '<div class="item"><span class="k">' + esc(k) + '</span><span class="v">'
+         + esc(shown) + '</span></div>';
+    }
+    h += '</div></section>';
+  }
+  if(d.facts && d.facts.length){
+    h += '<section><h4>关于' + esc(p.name) + '的记录</h4><div class="kv">';
+    for(const f of d.facts){
+      h += '<div class="item' + (f.status === "active" ? "" : " old") + '">'
+         + '<span class="k">' + esc(f.attribute) + '</span>'
+         + '<span class="v">' + esc(f.value) + '</span>'
+         + '<span class="prov">' + esc(f.provider) + ' · ' + esc(f.observed_on)
+         + (f.status === "active" ? '' : ' · 已被更正') + '</span></div>';
+    }
+    h += '</div></section>';
+  }
+  if(d.gifts && d.gifts.length){
+    h += '<section><h4>我送过什么</h4><div class="kv">';
+    for(const g of d.gifts){
+      h += '<div class="item"><span class="k">' + esc(g.happened_on) + ' · ' + esc(g.occasion)
+         + '</span><span class="v">' + esc(g.product_name) + '</span>'
+         + (g.feedback ? '<span class="prov">' + esc(g.feedback) + '</span>' : '') + '</div>';
+    }
+    h += '</div></section>';
+  }
+  if(d.needs_check && d.needs_check.length){
+    h += '<section><h4>待核实</h4><div class="kv">';
+    for(const f of d.needs_check){
+      h += '<div class="item"><span class="k">' + esc(f.attribute) + '</span><span class="v">'
+         + esc(f.value) + '</span><span class="prov">' + esc(f.provider) + ' · '
+         + esc(f.observed_on) + '</span></div>';
+    }
+    h += '</div></section>';
+  }
+  // 家人授权分享的近况。只列这个身份被授权看到的字段，
+  // 没授权的字段不出现在这里，也不是给了再藏。
+  if(d.life_events && d.life_events.length){
+    h += '<section><h4>近况</h4>'
+       + '<div style="font-size:12.5px;color:var(--ink-3);margin-bottom:8px">'
+       + '家人授权分享的记录，只显示允许我看的部分。</div><div class="kv">';
+    for(const ev of d.life_events){
+      const fields = Object.keys(ev.fields || {}).map((k) =>
+        esc(k) + "：" + esc(ev.fields[k])).join("；");
+      // 发生日期读不清时是空串。留空会显示成一条没有日期的记录，
+      // 看起来像漏渲染；写成今天又是在替事实补内容。这里如实标出来。
+      const dayText = ev.happened_on ? esc(ev.happened_on) : "发生日期未读到";
+      h += '<div class="item"><span class="k">' + esc(ev.source_label) + ' · '
+         + dayText + '</span><span class="v">' + fields + '</span>'
+         + '<span class="prov">' + esc(ev.provider)
+         + (ev.is_device ? ' · 设备数据，不是本人自述' : '') + '</span></div>';
+      // 配图跟着记录一起显示。刷新页面后照样看得到，
+      // 不然用户会以为「保存成功了，图却没存下来」。
+      // 图片地址按 event_id 取，服务端校验身份，不是拿到链接就能读。
+      if(ev.attachments && ev.attachments.length){
+        h += '<div style="display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 12px">';
+        for(const a of ev.attachments){
+          h += '<img src="/api/event/' + esc(ev.event_id) + '/attachment/'
+             + esc(a.attachment_id) + '" alt="记录配图" loading="lazy"'
+             + ' style="max-width:100%;border-radius:8px;border:1px solid var(--line)">';
+        }
+        h += '</div>';
+      }
+    }
+    h += '</div></section>';
+  }
+  h += '<button class="btn ghost" data-close-sheet>返回对话</button>';
+  $("sheet-body").innerHTML = h;
+  $("sheet").classList.add("open");
+}
+
+function openTaskSheet(d){
+  // 同样先收侧栏，避免手机上事项详情被压在侧栏后面。
+  $("side").classList.remove("open");
+  const m = {
+    task_id: d.task.task_id, utterance: d.task.utterance, stage: d.task.stage,
+    outcome: d.task.outcome, subject_name: d.subject ? d.subject.name : "",
+    budget_max: d.extracted.budget_max,
+    orders: d.orders,
+    latest_proposal: d.proposals.length ? d.proposals[d.proposals.length - 1] : null,
+  };
+  $("sheet-body").innerHTML = '<h2 id="sheet-title">事项</h2>'
+    + matterCard(m, d, {inSheet: true})
+    + '<button class="btn ghost" data-close-sheet style="margin-top:12px">返回对话</button>';
+  $("sheet").classList.add("open");
+}
+
+// 这里必须声明成 async：本人表态分支里有 await post(...) 去服务端记录。
+// 之前漏了 async，整个页面的脚本都解析不了，手机上点任何按钮都没反应。
+$("sheet").addEventListener("click", async (e) => {
+  if(e.target.id === "sheet" || e.target.closest("[data-close-sheet]")){
+    // 裁剪界面开着时，点「取消」按钮要回到草稿，不是关掉整个弹层。
+    // 那件事交给下面 cropState 分支做（作废这一轮 + 重画草稿）——
+    // 这里若抢先 invalidatePhoto() 把 cropState 清成 null，那个分支的
+    // 条件就再也不成立：用户点「取消」看到的是一整个弹层关掉、草稿界面
+    // 没了，而他只是不想认这一次裁剪，字和图都还在呢。
+    if(e.target.id !== "sheet" && cropState && noteCtx){
+      return;
+    }
+    // 点遮罩关掉时同样要作废这一轮：漏掉这条，迟到的旧编码照样会送出识别，
+    // 弹层还会重新打开一份他刚关掉的草稿。
+    if(cropState) invalidatePhoto();
+    $("sheet").classList.remove("open");
+    personStack = [];
+    return;
+  }
+  // 商品详情里的「换成这件」。这个按钮渲染在弹层里，
+  // 之前 choose 只挂在消息流的监听器上，弹层里的点击冒泡不到那里，
+  // 于是按钮看得见、点了没反应。这里补上同一个动作。
+  const chooseBtn = e.target.closest('[data-act="choose"]');
+  if(chooseBtn){
+    const btn = chooseBtn;
+    btn.disabled = true;
+    btn.textContent = "正在换…";
+    try{
+      const res = await post("/api/task/choose-candidate", {
+        task_id: btn.dataset.task,
+        product_id: btn.dataset.product,
+      });
+      $("sheet").classList.remove("open");
+      await renderStream();
+      await renderSide();
+      // 同上：下一步说什么，以服务端返回的为准。
+      setStatus(res.next_hint || "已换成这件");
+    }catch(err){
+      btn.disabled = false;
+      btn.textContent = "换成这件";
+      const box = document.getElementById("product-sheet-msg");
+      if(box){ box.textContent = "没能换成这件：" + (err.message || "请稍后再试");
+        box.style.display = "block"; }
+      setStatus("没能换成这件：" + err.message);
+    }
+    return;
+  }
+  // 关系链往回走一层：栈里最后一个就是刚点开的这个人，回到它前面那个。
+  if(e.target.closest("[data-person-back]")){
+    if(personStack.length > 1){
+      personStack.pop();
+      openPerson(personStack[personStack.length - 1], true);
+    }
+    return;
+  }
+  // 人物详情里的关系人要能继续点开：从谁的关系链点进去，就看那个人的详情。
+  // 之前这里只处理关闭，关系 chip 是死的，用户点了没反应。
+  const personBtn = e.target.closest("[data-person]");
+  if(personBtn){
+    openPerson(personBtn.dataset.person, true);
+    return;
+  }
+  // 协商详情弹层里是同一张事项卡，卡片动作要真的能跑：
+  // 确认购买、换商品、推进订单、重试都在这里接着。
+  const cardBtn = e.target.closest("button[data-act]");
+  if(cardBtn){
+    runCardAction(cardBtn.dataset.act, cardBtn, cardBtn.dataset.task);
+    return;
+  }
+  // 排第一版：失败时保留事项、按钮回到可点，不落任何版本。
+  const proposeBtn = e.target.closest("[data-plan-propose]");
+  if(proposeBtn){
+    const btn = proposeBtn;
+    btn.disabled = true;
+    btn.textContent = "正在排第一版…";
+    try{
+      await post("/api/plan/" + btn.dataset.planPropose + "/propose", {});
+      await openPlan(btn.dataset.planPropose);
+    }catch(err){
+      btn.disabled = false;
+      btn.textContent = "按当前条件排第一版";
+      const box = $("sheet-body").querySelector(".notice");
+      if(box) box.textContent = "没能排出这一版：" + (err.message || "请稍后再试")
+        + "。事项还在，可以改完条件再排。";
+    }
+    return;
+  }
+
+  // 共同事项里以本人身份表态。身份由当前演示身份决定，
+  // 服务端还要再核对这一方确实属于这个身份，别家代点会被拒。
+  const decideBtn = e.target.closest("[data-plan-decide]");
+  if(decideBtn){
+    const btn = decideBtn;
+    btn.disabled = true;
+    btn.textContent = "正在记录…";
+    try{
+      await post("/api/plan/" + btn.dataset.planDecide + "/decide", {
+        participant_id: btn.dataset.participant,
+        version: parseInt(btn.dataset.version, 10),
+        decision: btn.dataset.decision,
+        reason: "本人在手机端确认",
+      });
+      await openPlan(btn.dataset.planDecide);
+    }catch(err){
+      btn.disabled = false;
+      btn.textContent = err && err.status === 409 ? "没能记录，稍后再试" : "接受这一版";
+      const box = $("sheet-body").querySelector(".notice");
+      if(box) box.textContent = "没能记录这次确认：" + (err.message || "请稍后再试");
+    }
+    return;
+  }
+});
+
+/* ---------- 共同事项：发起、改自己的条件、重排 ---------- */
+const PLAN_LABELS = {A: "我家", B: "小周家", C: "小林家"};
+// 出资口径分成两个键：「活动总预算」是整场一共多少，「本人出资上限」是
+// 这一家自己最多出多少。旧键「预算」服务端会归一成「活动总预算」，
+// 新输入一律用这两个，不写一个说不清是谁的预算。
+const PLAN_KEYS = ["时间", "地点", "活动总预算", "本人出资上限", "活动内容",
+                   "孩子安排", "交通", "备注"];
+// 全局身份就是「谁本人在用」：A 是我，B 是小周，C 是小林。
+// 送礼者、家长这类只是具体事项里的角色，不是永久身份——
+// 写成永久身份会让整个作品看起来像送礼工具。
+const OWNER_TEXT = {A: "我", B: "小周", C: "小林"};
+const OWNER_ROLE_NOTE = {
+  A: "送礼这件事里，我是送礼者",
+  B: "送礼这件事里，我是孩子家长",
+  C: "小周的配偶，用自己家庭的人参与共同事项",
+};
+
+// 发起一个共同事项：标题加上各家自己给的条件。
+// 每家的条件只由这一家填，这里不替别家预设，也不把别家的条件复制过来。
+$("btn-new-plan").addEventListener("click", () => {
+  // 只渲染**本人这一方**的条件表单。原来三家各一份，提交时把三份一起发给
+  // /api/plan/create，服务端按「只能填自己一方」逐个 403——界面让填、
+  // 服务端不让填，用户看到的是「我按你说的做了却被拒」。
+  // 别家在这里只是待回应占位：谁参加由那一方自己从自己的会话确认。
+  const conds = PLAN_KEYS.map((k) =>
+    '<label class="cond-row"><span>' + esc(k) + '</span>'
+    + '<input type="text" data-cond-owner="' + esc(ownerId) + '"'
+    + ' data-cond-key="' + esc(k) + '" placeholder="可留空"></label>').join("");
+  const others = ["A", "B", "C"].filter((o) => o !== ownerId).map((o) =>
+    '<div class="item"><span class="k">' + esc(PLAN_LABELS[o]) + '</span>'
+    + '<span class="v">待这一方从自己的会话补条件、确认参与</span></div>').join("");
+  $("sheet-body").innerHTML = '<h2 id="sheet-title">发起共同事项</h2>'
+    + '<div class="sub">几个家庭要一起定一件事。你先把**你自己这一方**的条件写上；'
+    + '别家的条件由别家自己补，这里只留占位，不代填。</div>'
+    + '<label class="cond-row"><span>事项标题</span>'
+    + '<input type="text" id="new-plan-title" value="两个家庭周末一起带孩子去公园"></label>'
+    + '<section><h4>' + esc(PLAN_LABELS[ownerId]) + '（' + esc(OWNER_TEXT[ownerId])
+    + '）自己的条件</h4><div class="kv">' + conds + '</div>'
+    + '<div class="sub" style="margin-top:6px">'
+    + '「活动总预算」是整场一共多少，「本人出资上限」是你家最多出多少，'
+    + '两个不是一回事。说不清是哪个，服务端会请你确认，不替你默认。</div></section>'
+    + (others ? '<section><h4>其他方</h4><div class="kv">' + others + '</div></section>' : '')
+    + '<button class="btn primary" id="btn-create-plan" style="margin-top:14px">创建并生成第一版方案</button>'
+    + '<div class="notice" style="margin-top:10px">第一版方案由模型按各家当前条件排出，'
+    + '可能需要十几秒。生成前不落任何版本。别家还没给条件也能先排，'
+    + '缺的会作为缺口留在方案里。</div>'
+    + '<button class="btn ghost" data-close-sheet style="margin-top:12px">取消</button>';
+  $("sheet").classList.add("open");
+  $("btn-create-plan").addEventListener("click", async () => {
+    const btn = $("btn-create-plan");
+    btn.disabled = true;
+    btn.textContent = "正在生成第一版…";
+    try{
+      const title = $("new-plan-title").value.trim() || "几个家庭的共同事项";
+      const byOwner = {};
+      $("sheet-body").querySelectorAll("[data-cond-owner]").forEach((el) => {
+        const v = el.value.trim();
+        if(!v) return;
+        const o = el.dataset.condOwner;
+        byOwner[o] = byOwner[o] || {};
+        byOwner[o][el.dataset.condKey] = v;
+      });
+      // 只提交本人这一方。别家带条件会被服务端 403，这里索性不给他们造表单。
+      const created = await post("/api/plan/create", {
+        title: title, utterance: title,
+        participants: [ownerId].filter((o) => byOwner[o]).map((o) => ({
+          owner_id: o, label: PLAN_LABELS[o],
+          conditions: byOwner[o], required: true,
+        })),
+      });
+      // 复用时不再生成第一版：这件已经有各家在等的方案，
+      // 再排一版会让旧接受全部失效，用户会莫名其妙丢了进度。
+      if(!created.reused){
+        await post("/api/plan/" + created.plan_id + "/propose", {});
+      }
+      await openPlan(created.plan_id);
+      renderSidePlans();
+    }catch(err){
+      btn.disabled = false;
+      btn.textContent = "创建并生成第一版方案";
+      $("sheet-body").querySelector(".notice").textContent =
+        "没能创建：" + (err.message || "请稍后再试");
+    }
+  });
+});
+
+// 改自己这一方的条件。只改本人这一家，改完事项进入待重排，
+// 各家对旧版本的接受随之失效，要重新表态。
+$("sheet").addEventListener("click", (e) => {
+  const btn = e.target.closest("[data-plan-condition]");
+  if(!btn) return;
+  const planId = btn.dataset.planCondition;
+  const owner = btn.dataset.planOwner;
+  const current = JSON.parse(btn.dataset.planConditions || "{}");
+  const rows = PLAN_KEYS.map((k) =>
+    '<label class="cond-row"><span>' + esc(k) + '</span>'
+    + '<input type="text" data-edit-key="' + esc(k) + '" value="'
+    + esc(current[k] || "") + '" placeholder="可留空"></label>').join("");
+  $("sheet-body").innerHTML = '<h2 id="sheet-title">改' + esc(PLAN_LABELS[owner])
+    + '的条件</h2><div class="sub">只改这一家的条件。'
+    + '改完不等于接受当前方案，各家要按新条件重新表态。</div>'
+    + '<div class="kv">' + rows + '</div>'
+    + '<button class="btn primary" data-plan-condition-save="' + esc(planId)
+    + '" data-plan-owner="' + esc(owner) + '" style="margin-top:14px">保存条件</button>'
+    + '<button class="btn ghost" data-plan-reopen="' + esc(planId)
+    + '" style="margin-top:12px">返回事项</button>';
+});
+
+// 保存条件：写这一家的新条件，然后回到事项详情看重排入口。
+$("sheet").addEventListener("click", async (e) => {
+  const saveBtn = e.target.closest("[data-plan-condition-save]");
+  if(!saveBtn) return;
+  const planId = saveBtn.dataset.planConditionSave;
+  const owner = saveBtn.dataset.planOwner;
+  saveBtn.disabled = true;
+  saveBtn.textContent = "正在保存…";
+  try{
+    const conds = {};
+    $("sheet-body").querySelectorAll("[data-edit-key]").forEach((el) => {
+      const v = el.value.trim();
+      if(v) conds[el.dataset.editKey] = v;
+    });
+    await post("/api/plan/" + planId + "/condition", {
+      owner_id: owner, conditions: conds, reason: "本人在手机端改条件",
+    });
+    await openPlan(planId);
+    renderSidePlans();
+  }catch(err){
+    saveBtn.disabled = false;
+    saveBtn.textContent = "保存条件";
+    $("sheet-body").querySelector(".sub").textContent =
+      "没能保存：" + (err.message || "请稍后再试");
+  }
+});
+
+// 待重排时按各家当前条件出新版；失败可重试，失败不落新版本。
+$("sheet").addEventListener("click", async (e) => {
+  const btn = e.target.closest("[data-plan-replan]");
+  if(!btn) return;
+  const planId = btn.dataset.planReplan;
+  btn.disabled = true;
+  btn.textContent = "正在按新条件重排…";
+  try{
+    await post("/api/plan/" + planId + "/replan", {});
+    await openPlan(planId);
+    renderSidePlans();
+  }catch(err){
+    btn.disabled = false;
+    btn.textContent = "重排方案（可重试）";
+    const box = $("sheet-body").querySelector(".notice");
+    if(box) box.textContent = "没能排出新版：" + (err.message || "请稍后再试");
+  }
+});
+
+// 模型代替这一家审阅当前版本：和本人确认分开记录来源。
+$("sheet").addEventListener("click", async (e) => {
+  const btn = e.target.closest("[data-plan-review]");
+  if(!btn) return;
+  const planId = btn.dataset.planReview;
+  btn.disabled = true;
+  btn.textContent = "正在让代表审阅…";
+  try{
+    await post("/api/plan/" + planId + "/review", {
+      owner_id: btn.dataset.planOwner,
+      participant_id: btn.dataset.planParticipant,
+      version: parseInt(btn.dataset.planVersion, 10),
+    });
+    await openPlan(planId);
+    renderSidePlans();
+  }catch(err){
+    btn.disabled = false;
+    btn.textContent = "让代表先看这一版";
+    const box = $("sheet-body").querySelector(".notice");
+    if(box) box.textContent = "代表没能审阅：" + (err.message || "请稍后再试");
+  }
+});
+
+// 从条件编辑页返回事项详情。
+$("sheet").addEventListener("click", (e) => {
+  const btn = e.target.closest("[data-plan-reopen]");
+  if(!btn) return;
+  openPlan(btn.dataset.planReopen);
+});
+
+/* ---------- 拍一张记录：相机 → Step 识别 → 本人核对 → 记入 ----------
+
+   这条链刻意分成两步：先只识别并摊开给本人看，本人勾选认可的字段后才落库。
+   不让「拍一下」直接变成一条事实——模型看不清时会把猜测写得像真的，
+   而记录要长期被别处复用，一次误记会一直错下去。
+
+   拍照者、记忆所有者、记录主体分开传：家长拍的孩子记录和妈妈自己报的进度
+   来源不同，提供者字段里写清是谁拍的，不能混成本人自述。
+*/
+// photoCtx 已随记事本式录入一起退役：草稿统一走 noteCtx（见 noteDraft）。
+// 留着这个空对象只会让人以为还有一条并存的旧链路。
+
+function photoSubjects(){
+  // 主体只能从当前身份认识的人里选：不能让他把记录写到别人名下的人头上。
+  // 当前身份确实一个人都没有时返回空，由界面明说，不偷偷退回别人的名单。
+  return (lastPersons || []).filter((p) => p.owner_id === ownerId && p.name !== "我");
+}
+
+// 小应用是另一个页面，但共用同一份记录和同一个服务端会话：
+// 在那边录入的近况，这边按人回忆时照样读得到。所以这里直接跳转，
+// 不再做一份入口说明——跳过去看到的就是同一批数据。
+$("btn-open-apps").addEventListener("click", () => {
+  location.href = "/apps";
+});
+
+$("btn-photo").addEventListener("click", () => {
+  openNoteSheet();
+});
+
+/* ---------- 资料库：一份草稿，文字 / 图片都能进 ----------
+
+   原来打开就是「拍一张记录」：先选人、再选拍不拍，用户想打一行字
+   没有入口。用户要的是记事本那种——打开就能写，图是旁边的选项。
+
+   所以这里把入口换成「资料库 / 添加资料」：
+   1. 打开是一份可编辑草稿，正文框直接可写，不先逼人选人或选模式；
+   2. 图片是草稿旁边的动作，同一条草稿里可以既有文字又有图；
+   3. 图片给两条路——读出文字、或只作配图；识别结果照样可改；
+   4. 主体、日期都在草稿里改，有内容之后再补也不迟。
+
+   语音先说实话：当前模型接口没有可用的中文转写（见 /api/voice/transcribe
+   的实测记录）。所以语音按钮点下去只说明现状、给出能用的替代，
+   不假装转写，也不把一段录音说成已转写的文字。 */
+function noteDraft(){
+  return {
+    // 正文。可能来自本人打字、语音转写、或图片识别，三者的来源分开记，
+    // 回看时能分清哪句是本人写的、哪句是模型读的。
+    text: "",
+    fields: [],
+    attachments: [],
+    subjectId: "",
+    day: "",
+    // 这条草稿实际用了哪些输入方式，保存时随来源一起写清。
+    kinds: [],
+    // 最近一次成功识别的结果。没有识别过就是 null，不是空对象——
+    // 空对象会被当成「识别过但没有内容」，两者不是一回事。
+    read: null,
+    // 每张图的识别状态，按加图顺序排，和 attachments 的下标对得上，
+    // 回看时能说清第几张图读出了什么、哪一张失败了。
+    // 一条：{b64, origB64, ok, text, confidence, happened_on,
+    //        unclear_parts, error, appended, imageOnly}
+    // b64 是送识别时压缩后的那份（保存用它），origB64 是用户选的原文件
+    // （attachments 里存的那份）——两者不同，比内容去重时必须用 origB64，
+    // 拿压缩后的去比会永远不相等，同一张图在草稿里躺两份。
+    // appended 记这次识别插进正文的那段原文，「重新识别」时先原样撤掉。
+    reads: [],
+    // 正在识别中：为真时三个次要选项全部禁用，状态写「正在识别这张图…」，
+    // 防止同一张图被连点送出去好几次。
+    ocrBusy: false,
+    b64: "", media: "", cropped: false, imageOnly: false,
+  };
+}
+
+let noteCtx = null;
+
+function noteKindsLabel(){
+  if(!noteCtx || !noteCtx.kinds.length) return "";
+  const label = {text: "文字", image: "图片", voice: "语音"};
+  return noteCtx.kinds.map((k) => label[k] || k).join(" + ");
+}
+
+function noteAddKind(k){
+  if(!noteCtx) return;
+  if(noteCtx.kinds.indexOf(k) < 0) noteCtx.kinds.push(k);
+}
+
+function openNoteSheet(){
+  noteCtx = noteDraft();
+  renderNoteSheet();
+}
+
+function renderNoteSheet(){
+  const d = noteCtx;
+  if(!d) return;
+  let h = '<h2 id="sheet-title">新建资料</h2>'
+     + '<div class="sub">打字、贴图都行。加一张图就会自动读出图里的文字，'
+     + '直接进正文框，核对过再保存。</div>';
+
+  // 正文：打开就能写，不先逼人选人或选模式。
+  h += '<section><h4>记什么</h4>'
+     + '<textarea id="note-text" rows="4" style="width:100%;box-sizing:border-box;'
+     + 'font:inherit;padding:10px;border:1px solid var(--line);border-radius:10px;'
+     + 'background:var(--surface)" placeholder="例如：小雨今天自己拼图拼了挺久">'
+     + esc(d.text) + '</textarea>'
+     // 识别提示行：就在正文下面一行小字。只说他需要知道的两件事——
+     // 识别把握多少、失败时为什么不成功。不在这里放可编辑的识别结果：
+     // 文字已经进上面的正文框了，本人在那里直接改，再开一个框
+     // 等于让他把同一段字改两遍。
+     + '<div id="note-read-hint" class="sub" style="margin-top:4px"></div>'
+     + '<div class="sub" style="margin-top:4px">直接打字就行。'
+     + '「加一张图」会读出图里的文字并直接进正文框——这一步图会送去做识别；'
+     + '不想识别就用「只作配图」，只想认中间一块就用「先裁剪再识别」，'
+     + '这两个都在选图之前选，范围外的画面不会送出去。</div></section>';
+
+  // 图片与语音：草稿旁边的两个动作，不是进入这条草稿的前置门槛。
+  h += '<section><h4>加图片</h4>'
+     + '<div style="display:flex;gap:8px;flex-wrap:wrap">'
+     + '<button class="btn ghost" id="note-add-photo"'
+     + ' title="加图后会自动读出图里的文字，直接进正文框">加一张图</button>'
+     // 选图之前的两个轻量次入口。默认仍是「加一张图」= 自动识别，
+     // 不恢复成「加图后必须先选怎么用」那一道必经步骤。
+     // 但它们必须在**选文件之前**给出来：原来「先选范围再识别」要等整图
+     // 自动送出去之后才可点，那时候范围外的画面已经离开手机了，
+     // 再点它也谈不上保护——那是个假的隐私路径。
+     + '<button class="btn ghost" id="note-attach-only"'
+     + ' title="只把图存在这条资料里，不识别图里的字">只作配图</button>'
+     + '<button class="btn ghost" id="note-crop-first-entry"'
+     + ' title="先框出要识别的范围，只框里的内容会送去做识别">先裁剪再识别</button>'
+     // 语音用的是浏览器自带的语音识别，不经过我们的服务端、不落我们这边。
+     // 名字就叫「说一段」：这是真能用的功能，写「暂不可用」是把能做到的事
+     // 说成做不到。不支持或不让用麦克风的浏览器，点下去会如实说明。
+     + '<button class="btn ghost" id="note-add-voice" '
+     + 'title="用浏览器自带的语音识别，说完的话直接进正文，可以再改">说一段</button></div>'
+     + '<div id="note-attachments" style="display:flex;gap:8px;flex-wrap:wrap;'
+     + 'margin-top:10px"></div>'
+     + '<div id="note-image-acts" style="margin-top:10px"></div>'
+     + '<input type="file" id="note-photo-input" accept="image/*" style="display:none">'
+     + '<input type="file" id="note-attach-input" accept="image/*" style="display:none">'
+     + '</section>';
+
+  // 识别出来的内容直接进正文框（见 noteAppendText），这里不再单独开区块：
+  // 同一个内容在两处都能改，用户不知道该改哪一个，改完还可能只存了一份。
+
+  // 主体与日期：有内容之后再补也来得及，不做成进来的第一道门。
+  h += '<section><h4>记在谁名下</h4><div id="note-subjects"'
+     + ' style="display:flex;gap:8px;flex-wrap:wrap"></div>'
+     + '<div class="sub" style="margin-top:6px">'
+     + '忘了选也能先写，保存前在这里补上。</div></section>';
+
+  h += '<section><h4>发生日期</h4>'
+     + '<input type="date" id="note-day" value="' + esc(d.day) + '"'
+     + ' style="width:100%;box-sizing:border-box;font:inherit;padding:8px;'
+     + 'border:1px solid var(--line);border-radius:8px;background:var(--surface">'
+     + '<div class="sub" style="margin-top:4px">'
+     + '留空表示发生日期未知，不会算成今天发生。</div></section>';
+
+  h += '<div style="margin-top:14px;display:flex;flex-direction:column;gap:8px">'
+     + '<button class="btn primary" id="note-save">保存资料</button>'
+     + '<button class="btn ghost" data-close-sheet>再想想</button></div>';
+
+  $("sheet-body").innerHTML = h;
+  $("sheet").classList.add("open");
+  renderNoteAttachments();
+  renderNoteSubjects();
+  renderNoteImageActs();
+}
+
+function renderNoteAttachments(){
+  const box = $("note-attachments");
+  if(!box || !noteCtx) return;
+  const items = noteCtx.attachments;
+  if(!items.length){
+    box.innerHTML = '<div class="sub" style="margin:0">还没有图片。</div>';
+    return;
+  }
+  box.innerHTML = items.map((a, i) =>
+    '<div style="position:relative;width:72px">'
+    + '<img src="data:' + esc(a.media) + ';base64,' + esc(a.b64) + '"'
+    + ' style="width:72px;height:72px;object-fit:cover;border-radius:8px;'
+    + 'border:1px solid var(--line);display:block">'
+    + '<button data-n-del="' + i + '" class="btn ghost"'
+    + ' style="width:100%;margin-top:4px;padding:4px 0;font-size:12px">移除</button>'
+    + '</div>').join("");
+}
+
+function renderNoteSubjects(){
+  const box = $("note-subjects");
+  if(!box || !noteCtx) return;
+  const subs = photoSubjects();
+  const cur = noteCtx.subjectId;
+  if(!subs.length){
+    box.innerHTML = '<div class="sub" style="margin:0">'
+       + '人物名单还没取到，保存前在这里选一个。</div>';
+    return;
+  }
+  box.innerHTML = subs.map((p) =>
+    '<button type="button" class="chip btn-chip" data-n-subject="'
+    + esc(p.person_id) + '"' + (p.person_id === cur ? ' data-cur="1"' : '')
+    + ' style="' + (p.person_id === cur
+       ? 'border-color:var(--accent);color:var(--accent);background:var(--accent-soft)'
+       : '') + '">' + esc(p.name)
+    + (p.relation ? " · " + esc(relationText(p.relation)) : "")
+    + '</button>').join("");
+}
+
+/* 加图之后的次要选项。
+
+   加图时已经自动识别过了（见 notePickImage → noteQueueOcr），所以这里
+   三个都不再是必经步骤，降成小号按钮，但仍然都可达：
+   - 重新识别：再认一次当前这张图。先把上次插进正文的那段原样撤掉，
+     不会在正文里留两遍；
+   - 先选范围再识别：图上只有中间一块是要记的、边上拍到的是客厅和家人时，
+     用户自己决定哪些内容离开手机。这条是隐私路径，不能因为简化就拿掉；
+   - 只作配图，不识别：那张图可能根本没有文字（奖状、手工作品），
+     把自动识别插进去的那段撤掉，图照旧存。
+
+   识别期间三个全部禁用：同一张图被连点会送出去好几次，白花时间，
+   回来还要抢着往正文里插字。 */
+function renderNoteImageActs(){
+  const box = $("note-image-acts");
+  if(!box) return;
+  if(!noteCtx || !noteCtx.b64){ box.innerHTML = ""; renderNoteReadHint(); return; }
+  const busy = !!noteCtx.ocrBusy;
+  const dis = busy ? " disabled" : "";
+  const small = 'padding:5px 10px;font-size:12.5px';
+  let h = '<div style="display:flex;gap:8px;flex-wrap:wrap">'
+     + '<button class="btn ghost" id="note-ocr"' + dis + ' style="' + small + '">'
+     + (busy ? "正在识别这张图…" : "重新识别") + '</button>'
+     + '<button class="btn ghost" id="note-crop-first"' + dis + ' style="' + small + '">'
+     + '先选范围再识别</button>'
+     + '<button class="btn ghost" id="note-keep-image"' + dis + ' style="' + small + '">'
+     + '只作配图，不识别</button>'
+     + '</div>'
+     + '<div class="sub" style="margin-top:6px">'
+     + '加图时已经自动识别过，文字在正文框里，可以直接改。'
+     + '只想认中间一块、或边上拍到了不想外传的内容，用「先选范围再识别」；'
+     + '这张图不要文字，用「只作配图，不识别」。</div>';
+  box.innerHTML = h;
+  renderNoteReadHint();
+}
+
+/* 识别提示行：就在正文框下面一行小字，见 renderNoteSheet 里的注释。
+   逐张图列清楚，多张图时用户知道哪段字来自哪一张。 */
+function renderNoteReadHint(){
+  const box = $("note-read-hint");
+  if(!box) return;
+  if(!noteCtx){ box.textContent = ""; return; }
+  const parts = [];
+  if(noteCtx.ocrBusy) parts.push("正在识别这张图…");
+  noteCtx.reads.forEach((r, i) => {
+    const nth = "第" + (i + 1) + "张图";
+    if(r.ok && r.text){
+      parts.push(nth + "识别把握：" + (r.confidence || "未给")
+                 + "，文字已进上面的正文框，可以直接改");
+    }else if(!r.ok){
+      parts.push(nth + "没识别出来：" + (r.error || "原因没给")
+                 + "。图已作为配图留下，正文不受影响");
+    }
+  });
+  box.textContent = parts.join("；");
+}
+
+/* 图片进草稿：先解码，再直接进草稿出缩略图，不跳裁剪。
+   裁剪只在本人点「先选范围再识别」时才走——见 noteCropFirst。 */
+/* 读一张 base64 图的真实宽高。裁剪状态要按图的实际尺寸算比例，
+   拿不到尺寸就只能拿一个猜的矩形去框，用户看到的选择区会和图对不上。 */
+function imageDim(b64, media){
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve({w: img.naturalWidth, h: img.naturalHeight});
+    // 解码失败必须 resolve(null)，不能什么都不做：那样这个 Promise 永远
+    // pending，调用方的 await 挂住，按钮停在「正在识别…」再也回不来。
+    img.onerror = () => resolve(null);
+    img.src = "data:" + (media || "image/jpeg") + ";base64," + b64;
+  });
+}
+
+/* 这次选图要走哪条路，由选图**之前**点的那个按钮决定。
+   auto：加图即识别（默认）；attach：只作配图，一次模型都不调；
+   crop：先框范围，只把框里的内容送去做识别。
+   变量在每次选图前重置，不会把上一次的选择留到下一张图。 */
+let notePickMode = "auto";
+
+async function notePickImage(inputId){
+  const inp = $(inputId);
+  if(!inp || !inp.files || !inp.files[0]) return;
+  const mode = notePickMode;
+  notePickMode = "auto";
+  const f = inp.files[0];
+  setStatus("正在读这张图…");
+  try{
+    const src = await fileToB64(f);
+    noteAddKind("image");
+    noteCtx.b64 = src.b64;
+    noteCtx.media = src.media;
+    noteCtx.imageOnly = false;
+    noteCtx.read = null;
+    // 只作配图：图进草稿，不识别、不送模型。用户明确说了不要文字，
+    // 就没有任何理由把这张图送出去。
+    if(mode === "attach"){
+      noteCtx.attachments.push({b64: src.b64, media: src.media});
+      renderNoteAttachments();
+      renderNoteImageActs();
+      setStatus("这张图只作为配图保存，没有识别图里的字");
+      return;
+    }
+    // 先裁剪再识别：整张图一次都不送，直接进裁剪。裁剪完只把框里的
+    // 那份编码送去做识别（见裁剪收尾处的 noteRunOcr 调用）。
+    if(mode === "crop"){
+      // 图照样进草稿（缩略图要能看见、保存要能带上），但不识别。
+      // 识别推到裁剪之后，并且只送框里那一份——整张图一次都没送出去。
+      noteCtx.attachments.push({b64: src.b64, media: src.media});
+      renderNoteAttachments();
+      renderNoteImageActs();
+      noteCropFirst();
+      return;
+    }
+    // 加图就是加图：图直接进草稿、立刻看得见缩略图，不跳裁剪。
+    // 原来这里直接 renderPhotoCrop，整块弹层被裁剪界面替掉——
+    // 草稿上打的字、选的人、语音按钮全部消失，用户被留在一个
+    // 他并没有要求进的界面里。裁剪改成「要识别时」那一步才走。
+    noteCtx.attachments.push({b64: src.b64, media: src.media});
+    renderNoteAttachments();
+    renderNoteImageActs();
+    // 加完图就识别，不再弹「这张图要怎么用」让用户先选。
+    // 产品 owner 2026-10-16：「添加资料交互过于复杂，加一张图后就应该在
+    // 弹窗时就让用户识别图片内容还是直接插入输入框」。那一步选择对
+    // 绝大多数情况是白交代一次——加图的人就是要图里的字。
+    // b64/media 由这里传死，识别函数不自己读 noteCtx.b64：连续加两张图时
+    // noteCtx.b64 已经是后一张，读它会认错图。
+    noteQueueOcr(src.b64, src.media);
+  }catch(err){
+    setStatus("没读出这张图：" + err.message);
+  }finally{
+    inp.value = "";
+  }
+}
+
+/* 识别排队：一张一张来，不并发。
+
+   并发的两个后果都不好：两张图的文字按网络返回顺序插进正文，先后会变，
+   和用户加图的顺序对不上；两个请求还会互相写 noteCtx.b64，后加的那张
+   可能被识别成前一张。排队之后按加图顺序依次进正文。 */
+let noteOcrChain = Promise.resolve();
+
+function noteQueueOcr(b64, media){
+  noteOcrChain = noteOcrChain.then(() => noteRunOcr(b64, media, false))
+                                .catch(() => {});
+  return noteOcrChain;
+}
+
+/* 找某张图对应的识别状态。按压缩后的 b64 找——识别送出去的是压缩那份，
+   条目里记的也是它。 */
+function noteFindRead(b64){
+  if(!noteCtx) return null;
+  return noteCtx.reads.find((r) => r.b64 === b64) || null;
+}
+
+/* 把一段字并进正文框末尾：已打的内容留在前面，中间加一个换行分隔。
+   返回真正插进去的那段（不含分隔换行），「重新识别」时按它原样撤。
+   识别结果本来就是草稿，本人直接在这个框里改，所以不另开编辑区。 */
+function noteAppendText(t){
+  const box = $("note-text");
+  if(!box || !noteCtx) return "";
+  const cur = box.value || "";
+  box.value = cur ? (cur + "\n" + t) : t;
+  noteCtx.text = box.value;
+  noteAddKind("text");
+  return t;
+}
+
+/* 把上一次识别插进正文的那段字原样撤掉。
+
+   不撤的话，点「重新识别」会把同一张图的文字在正文里留两遍，
+   而用户已经说不出哪一段是哪一次识别的了。
+
+   只认「完整一行还是那段原文」的情况。按子串找会把用户改过的那句
+   劈成两半：他把「…四十分钟」改成「…四十分钟，练完自己收了琴」之后，
+   子串匹配仍然命中前半段，撤完剩下一句没有主语的残句，
+   比重留一遍更难收拾。所以改过就不动他的，只把新结果追加进去。 */
+function noteRemoveAppended(entry){
+  if(!entry || !entry.appended) return;
+  const box = $("note-text");
+  const gone = entry.appended;
+  entry.appended = "";
+  if(!box || !noteCtx) return;
+  const lines = (box.value || "").split("\n");
+  const at = lines.findIndex((l) => l.trim() === gone.trim());
+  if(at < 0) return;
+  lines.splice(at, 1);
+  box.value = lines.join("\n");
+  noteCtx.text = box.value;
+}
+
+/* 送一次识别，把结果并进正文框末尾。加图后自动走这条，
+   「重新识别」「先选范围再识别」也走这条。
+
+   b64/media 由调用方给死：多张图连续加时 noteCtx.b64 已经是后一张，
+   识别函数自己去读它会认错图。
+   reuseEntry 给「先选范围再识别」用：裁剪出来的是同一张图的另一份编码，
+   必须接着原来那条识别状态写，不能新开一条——新开一条的话，
+   noteRemoveAppended 撤不掉自动识别插进去的那段，正文里就留两遍。
+
+   三条硬约束：
+   1. 失败不卡死。图仍然作为配图留在草稿里，提示行说明原因，
+      按钮回到「重新识别」，用户已打的正文一个字不丢，草稿照样能保存；
+   2. 防重复点击。识别期间 ocrBusy 为真，三个次要选项全部禁用；
+   3. 重新识别不重复插字。先把上次插进正文的那段原样撤掉再插新的。
+
+   复用现成的 /api/photo/read 与 wholeImageB64，不新建模块、不改服务端接口。 */
+async function noteRunOcr(b64, media, cropped, reuseEntry){
+  if(!noteCtx) return;
+  let entry = reuseEntry || noteFindRead(b64);
+  if(!entry){
+    entry = {b64: b64, origB64: b64, ok: false, text: "", confidence: "",
+             happened_on: "", unclear_parts: [], error: "", appended: "",
+             imageOnly: false};
+    noteCtx.reads.push(entry);
+  }
+  // 本人点了「只作配图」：这一张不要文字。还在排队没跑的识别直接作废，
+  // 否则用户刚撤掉那段字，排队的识别又给它插回来。
+  if(entry.imageOnly) return;
+  noteCtx.ocrBusy = true;
+  renderNoteImageActs();
+  setStatus("正在识别这张图…");
+  let picked;
+  try{
+    picked = await wholeImageB64(b64, media);
+  }catch(err){
+    entry.error = err.message || "这张图转不成能识别的格式";
+    noteCtx.ocrBusy = false;
+    renderNoteImageActs();
+    setStatus("这张图没能识别：" + entry.error
+              + "。图已作为配图留下，可以点「重新识别」再试，正文不受影响");
+    return;
+  }
+  if(!noteCtx) return;
+  // 压缩后的图作为这条草稿的主图送保存，和原来 note-ocr 的行为一致。
+  noteCtx.b64 = picked.b64;
+  noteCtx.media = picked.media;
+  noteCtx.cropped = !!cropped;
+  noteCtx.imageOnly = false;
+  // 条目改按压缩后的 b64 记：下次「重新识别」要能找回到这一条。
+  // origB64 不动，去重时还要靠它比 attachments 里那份原始图。
+  entry.b64 = picked.b64;
+  let read;
+  try{
+    read = await post("/api/photo/read",
+      {image_b64: picked.b64, media_type: picked.media});
+  }catch(err){
+    entry.error = err.message || "识别没返回结果";
+    noteCtx.ocrBusy = false;
+    renderNoteImageActs();
+    setStatus("这张图没能识别：" + entry.error
+              + "。图已作为配图留下，可以点「重新识别」再试，正文不受影响");
+    return;
+  }
+  // 识别回来的路上草稿可能已经关了。迟到的结果不写进任何地方。
+  if(!noteCtx) return;
+  entry.ok = true;
+  entry.error = "";
+  entry.text = read.transcribed || "";
+  entry.confidence = read.confidence || "";
+  entry.happened_on = read.happened_on || "";
+  entry.unclear_parts = read.unclear_parts || [];
+  noteCtx.read = read;
+  // 图上读到日期就填进草稿：用户还要自己去找那个日期框、再手打一遍，
+  // 那是白交代一次。读不到就留空——留空表示未知，不拿今天冒充。
+  if(!noteCtx.day && entry.happened_on) noteCtx.day = entry.happened_on;
+  // 输入框也要跟着填：noteSave 是从 DOM 取最终值的，只在 noteCtx 上改、
+  // 不写回输入框的话，保存时那一眼看到的日期又被空值盖掉。
+  const dayBox = $("note-day");
+  if(dayBox && noteCtx.day && !dayBox.value) dayBox.value = noteCtx.day;
+  // 文字进正文框。先撤掉上次这一段插进去的，再插新的。
+  noteRemoveAppended(entry);
+  if(entry.text) entry.appended = noteAppendText(entry.text);
+  noteCtx.ocrBusy = false;
+  renderNoteImageActs();
+  if(entry.text){
+    setStatus("读完了，文字已经进正文框，可以直接改");
+  }else{
+    // 模型没读到字也是正常结果（那张图可能真的没有文字）。
+    // 不能说成失败——用户会以为自己哪里做错了。
+    setStatus("这张图里没读到文字。图已作为配图留下，正文不受影响");
+  }
+}
+
+/* 记事本草稿里的所有点击。
+
+   这里不再有「选人才能继续」这道门：草稿打开就能写，主体、日期都是
+   草稿里的字段，有内容之后再补。图片和语音是旁边两个动作，
+   同一条草稿可以同时有文字和图片。 */
+$("sheet").addEventListener("click", async (e) => {
+  if(!noteCtx) return;
+  const d = noteCtx;
+
+  if(e.target.id === "note-add-photo"){
+    notePickMode = "auto";
+    $("note-photo-input").click();
+    return;
+  }
+
+  // 选图之前的两个次入口：先把模式记下来，再开同一个文件选择框。
+  // 不另开输入框、不新增接口——只是让用户在文件送出去之前说清要什么。
+  if(e.target.id === "note-attach-only"){
+    notePickMode = "attach";
+    $("note-photo-input").click();
+    return;
+  }
+
+  if(e.target.id === "note-crop-first-entry"){
+    notePickMode = "crop";
+    $("note-photo-input").click();
+    return;
+  }
+
+  const openPlanBtn = e.target.closest('[data-act="open-plan"]');
+  if(openPlanBtn){
+    await openPlan(openPlanBtn.dataset.plan);
+    return;
+  }
+
+  if(e.target.id === "note-add-voice"){
+    noteVoice(e.target);
+    return;
+  }
+
+  // 加图之后的三条次要路径，见 renderNoteImageActs 的注释。
+  // 识别已经不是这里的必经步骤了——加图时就自动识别过。
+  if(e.target.id === "note-ocr"){
+    // 重新识别：先撤掉上次插进正文的那段再认，不会留两遍。
+    if(!d.b64){ setStatus("先加一张图"); return; }
+    if(d.ocrBusy) return;
+    noteQueueOcr(d.b64, d.media);
+    return;
+  }
+
+  if(e.target.id === "note-crop-first"){
+    noteCropFirst();
+    return;
+  }
+
+  if(e.target.id === "note-keep-image"){
+    // 只作配图：不要文字。把自动识别插进去的那段原样撤掉，
+    // 图照旧作为配图留在草稿里。
+    noteRemoveAppended(noteFindRead(d.b64));
+    const cur = noteFindRead(d.b64);
+    if(cur) cur.imageOnly = true;
+    d.imageOnly = true;
+    d.read = null;
+    // 同一张图不要出现两遍：indexOf 比的是对象引用，两个内容一样的
+    // 字面量对象永远不相等，那行判断恒为真，加图时压过的那张又压一次，
+    // 草稿里躺着两张一模一样的配图，用户得自己删。按内容比——
+    // 而且必须拿原始文件那份（origB64）比，不能拿压缩后的 noteCtx.b64：
+    // 识别之后 noteCtx.b64 已经是压缩图，attachments 里存的是原图，
+    // 两者永远不相等，同一个 bug 会以另一种形式留下来。
+    const orig = (cur && cur.origB64) || d.b64;
+    const same = d.attachments.some((a) => a.b64 === orig);
+    if(!same) d.attachments.push({b64: orig, media: d.media});
+    renderNoteAttachments();
+    renderNoteImageActs();
+    setStatus("这张图会作为配图保存，识别出的文字已从正文撤掉");
+    return;
+  }
+
+  // 换主体：只改草稿，还没保存，所以不会写错人。
+  const subBtn = e.target.closest("[data-n-subject]");
+  if(subBtn){
+    d.subjectId = subBtn.dataset.nSubject;
+    renderNoteSubjects();
+    return;
+  }
+
+  const del = e.target.closest("[data-n-del]");
+  if(del){
+    d.attachments.splice(Number(del.dataset.nDel), 1);
+    renderNoteAttachments();
+    return;
+  }
+
+  if(e.target.id === "note-save"){
+    noteSave(e.target);
+    return;
+  }
+});
+
+/* 草稿输入：正文打字即标记这条用了文字。不要求先选人再打字。 */
+$("sheet").addEventListener("input", (e) => {
+  if(!noteCtx) return;
+  if(e.target.id === "note-text"){
+    noteCtx.text = e.target.value;
+    if(e.target.value.trim()) noteAddKind("text");
+    return;
+  }
+  if(e.target.id === "note-day"){
+    noteCtx.day = e.target.value;
+    return;
+  }
+});
+
+$("sheet").addEventListener("change", (e) => {
+  if(!noteCtx) return;
+  if(e.target.id === "note-photo-input"){ notePickImage("note-photo-input"); return; }
+  if(e.target.id === "note-attach-input"){ noteAttachExtra("note-attach-input"); return; }
+});
+
+/* 再加一张纯配图：不裁剪、不识别，它就是要跟着记录存的图。 */
+async function noteAttachExtra(inputId){
+  const inp = $(inputId);
+  if(!inp || !inp.files || !inp.files[0]) return;
+  const f = inp.files[0];
+  try{
+    const src = await fileToB64(f);
+    noteAddKind("image");
+    noteCtx.attachments.push({b64: src.b64, media: src.media});
+    renderNoteAttachments();
+    setStatus("这张图会作为配图保存");
+  }catch(err){
+    setStatus("这张图没读出来：" + err.message);
+  }finally{
+    inp.value = "";
+  }
+}
+
+/* 先圈范围再识别：可选的那条。图上只有中间一块是要记的、
+   边上拍到的是客厅和家人时，用户需要自己决定哪些内容离开手机。 */
+function noteCropFirst(){
+  if(!noteCtx || !noteCtx.b64){ setStatus("先加一张图"); return; }
+  const dim0 = imageDim(noteCtx.b64, noteCtx.media);
+  dim0.then((dim) => {
+    if(!dim || !noteCtx){ setStatus("这张图读不出来，换一张试试"); return; }
+    photoSeq += 1;
+    cropState = {b64: noteCtx.b64, media: noteCtx.media,
+                 w: dim.w, h: dim.h, rect: {x: 0.08, y: 0.08, w: 0.84, h: 0.84}};
+    renderPhotoCrop(noteCtx.b64, noteCtx.media);
+    setStatus("选好要识别的范围，只框里的内容会送去做识别");
+  });
+}
+
+/* 语音输入：用浏览器自带的 SpeechRecognition，边说边出字。
+
+   这条路和服务端模型接口无关：识别在浏览器里完成，音频不送到我们的服务，
+   也不进我们的库。所以它不依赖那个没有中文转写能力的模型代理——
+   之前标注「暂不可用」，是因为只看了服务端一条路，漏了浏览器本来就有这个能力。
+   实测当前页面（http://127.0.0.1:8000，localhost 属安全上下文）
+   可以构造 SpeechRecognition，getUserMedia 也可用。
+
+   三条老规矩不变：识别结果本人可以改；不说做不到的事；
+   浏览器不支持或用户不让用麦克风时如实说明，不假装成功。 */
+let noteSpeech = null;
+
+function speechSupported(){
+  return !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+}
+
+function noteVoice(btn){
+  if(!noteCtx) return;
+  // 正在听的时候再点一次就是停止，不让用户找不到地方收尾。
+  if(noteSpeech){
+    noteSpeech.stop();
+    return;
+  }
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SR){
+    setStatus("这个浏览器不能语音识别：可以先用手写或输入法的语音转文字，再粘贴进来");
+    return;
+  }
+  const rec = new SR();
+  noteSpeech = rec;
+  rec.lang = "zh-CN";
+  rec.interimResults = true;   // 边说边显示，说完就能看出对不对
+  rec.continuous = false;
+  let said = "";               // 已经定稿的部分
+  let pending = "";            // 还没定稿的半句
+  btn.disabled = false;
+  btn.textContent = "说完了，点这里停";
+  setStatus("在听了，说话吧");
+
+  const box = $("note-text");
+  const paint = () => {
+    if(!box) return;
+    box.value = (noteCtx.text ? noteCtx.text + "\n" : "") + said + pending;
+  };
+  const finish = () => {
+    if(noteSpeech === rec) noteSpeech = null;
+    btn.textContent = "说一段";
+    btn.disabled = false;
+  };
+  rec.onresult = (e) => {
+    said = ""; pending = "";
+    for(let i = 0; i < e.results.length; i++){
+      const piece = e.results[i][0].transcript || "";
+      if(e.results[i].isFinal) said += piece;
+      else pending += piece;
+    }
+    paint();
+  };
+  rec.onerror = (e) => {
+    const why = {"not-allowed": "没让用麦克风", "service-not-allowed": "浏览器不让用语音识别",
+                 "no-speech": "没听到声音", "audio-capture": "没有可用的麦克风",
+                 "network": "识别服务没连上"}[e.code] || ("出了点问题（" + e.code + "）");
+    setStatus("语音没接上：" + why + "。可以直接打字，或用输入法的语音转文字粘贴进来");
+    finish();
+  };
+  rec.onend = () => {
+    // 半句没收尾的就地定稿：不说丢掉，也不把没说完的话当成完整一句存起来。
+    if(pending){ said += pending; pending = ""; }
+    if(said){
+      noteAddKind("voice");
+      noteCtx.text = (noteCtx.text ? noteCtx.text + "\n" : "") + said;
+      if(box) box.value = noteCtx.text;
+      setStatus("话已转成文字，可以改完再保存");
+    }else{
+      setStatus("没听到话，可以再点一次「说一段」");
+    }
+    finish();
+  };
+  try{
+    rec.start();
+  }catch(err){
+    setStatus("语音没接上：" + (err.message || "启动失败")
+              + "。可以直接打字，或用输入法的语音转文字粘贴进来");
+    finish();
+  }
+}
+
+/* 保存：草稿的最终值。文字、识别并进来的内容、配图、主体、日期
+   一起送。没有图也存得了——一条纯文字记录同样是要记的事。 */
+async function noteSave(btn){
+  if(!noteCtx) return;
+  const d = noteCtx;
+  const text = (($("note-text") || {}).value || "").trim();
+  d.text = text;
+  d.day = (($("note-day") || {}).value || "").trim();
+  const hasText = !!text;
+  const hasAttach = (d.attachments || []).length > 0;
+  if(!hasText && !hasAttach){
+    setStatus("写点什么，或者加一张图再记");
+    return;
+  }
+  if(!d.subjectId){
+    setStatus("还没选这条记在谁名下");
+    return;
+  }
+  btn.disabled = true;
+  btn.textContent = "正在保存…";
+  setStatus("正在保存…");
+  try{
+    const res = await post("/api/photo/save", {
+      subject_id: d.subjectId,
+      // 没有图时传空串：原来这个字段硬性要求有内容，
+      // 等于把「只打字」这条路堵死。
+      image_b64: d.b64 || "",
+      media_type: d.media || "image/jpeg",
+      captured_by: meName,
+      confirmed_fields: {},
+      // 只作配图时给一份空识别结果，不给 null：传 null 服务端会当成
+      // 「还没识别」，自己再调一次模型。用户点了「不识别」就是不要识别，
+      // 这次调用既白花时间，还可能覆盖他刚写好的正文。
+      read: d.read || {happened_on: d.day || "", items: [], note: "本条目只作配图，未识别"},
+      draft_text: d.text,
+      happened_on: d.day,
+      attachments: d.attachments.map((a) => ({b64: a.b64, media: a.media})),
+      input_kinds: d.kinds,
+      voice_text: "",
+    });
+    $("sheet").classList.remove("open");
+    cropState = null;
+    noteCtx = null;
+    await renderStream();
+    await renderSide();
+    setStatus(res.created ? "资料已保存" : "这条资料已经保存过了");
+    // 保存成功之后问一句「这条要不要用于哪件事」。
+    // 不自动挂：这条资料跟哪件事有关，只有本人知道，系统猜错比不猜更糟
+    // （猜错的依据会进入协商，对方按错误信息做判断）。
+    // 没有未完事项时这句话不出现——没有可挂的对象，摆一个空选择是噪音。
+    let tasks = [];
+    try{
+      const d2 = await api("/api/note/linkable-tasks");
+      tasks = (d2 && d2.tasks) || [];
+    }catch(err){
+      tasks = [];
+    }
+    const tip = document.createElement("div");
+    tip.className = "msg pa";
+    let h = '<div class="bubble">资料已保存。这条来源是「'
+       + esc(res.provider) + '」。';
+    if(tasks.length){
+      h += '<div style="margin-top:8px;font-size:12.5px;color:var(--ink-3)">'
+         + '这条资料要用于哪件事？点一下就行，不点也不会丢。</div><div id="note-link-box">';
+      for(const t of tasks){
+        h += '<button type="button" class="chip btn-chip" data-note-link-task="'
+           + esc(t.task_id) + '" data-note-link-event="' + esc(res.event_id) + '">'
+           + esc(t.utterance.length > 18 ? t.utterance.slice(0, 18) + "…" : t.utterance)
+           + ' · ' + esc(t.stage_text) + '</button>';
+      }
+      h += '</div>';
+    }
+    h += '<div style="margin-top:10px"><button class="btn ghost" data-note-plan-event="' + esc(res.event_id) + '">用于家庭活动</button><div class="sub">先核对来源和字段；不自动公开正文或图片。</div></div>';
+    h += '</div>';
+    tip.innerHTML = h;
+    stream.appendChild(tip);
+    stream.scrollTop = stream.scrollHeight;
+  }catch(err){
+    setStatus("没保存：" + err.message);
+  }finally{
+    btn.disabled = false;
+    btn.textContent = "保存资料";
+  }
+}
+
+// 读原图，同时按 DataURL 里的 mime 判断真实格式。
+// 只返回 base64 不够：调用方要拿它当 media_type 送服务端，而 file.type
+// 有时是空串（部分安卓相册和浏览器会漏），这时把一张 PNG 按 jpeg 送，
+// 服务端标签认错，识别直接失败。DataURL 的 mime 是浏览器刚解出来的，比 file.type 可靠。
+function fileToB64(file){
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => {
+      const s = String(r.result || "");
+      const i = s.indexOf(",");
+      const m = /^data:([^;]+);/.exec(s);
+      resolve({b64: i >= 0 ? s.slice(i + 1) : s,
+               media: (m && m[1]) || file.type || "image/jpeg"});
+    };
+    r.onerror = () => reject(new Error("读取图片失败"));
+    r.readAsDataURL(file);
+  });
+}
+
+/* 手机相机原图动辄 3-8MB、4000×3000 以上。识别只需要看清文字，
+   不需要原图：直接上传会被服务端的体积上限挡下，用户看到的是
+   「没读出来」，而真实原因是文件太大——这等于让用户自己想办法
+   压缩，违背「少交代」的前提。
+
+   所以在浏览器里先降尺寸：长边压到 1600px，质量逐级降到 0.7，
+   出来的图通常一两百 KB，文字仍然清楚。压不动或失败时退回原图，
+   由服务端给出明确原因，不在这里假装成功。 */
+const PHOTO_MAX_EDGE = 1600;
+
+function fileToCompressedB64(file){
+  // 返回 {b64, media}：压缩分支产出 jpeg，原图分支带上真实格式，
+  // 调用方只消费这一个形状。失败必须 reject，让外层的 catch 说得出原因；
+  // 只 resolve 的话 FileReader 出错会让这个 Promise 永远 pending，
+  // 界面停在「正在读」不动，用户只能刷新页面。
+  return new Promise((resolve, reject) => {
+    const fail = () => fileToB64(file).then(resolve, reject);
+    if(!/^image\//.test(file.type || "") || typeof createImageBitmap !== "function"){
+      fail();
+      return;
+    }
+    const toBmp = createImageBitmap(file);
+    toBmp.then((bmp) => {
+      const w = bmp.width, h = bmp.height;
+      const scale = Math.min(1, PHOTO_MAX_EDGE / Math.max(w, h));
+      if(scale >= 1 && file.size <= 1.5 * 1024 * 1024){
+        bmp.close();
+        fail();
+        return;
+      }
+      const cw = Math.max(1, Math.round(w * scale));
+      const ch = Math.max(1, Math.round(h * scale));
+      const cv = document.createElement("canvas");
+      cv.width = cw;
+      cv.height = ch;
+      const ctx = cv.getContext("2d");
+      if(!ctx){ bmp.close(); fail(); return; }
+      ctx.drawImage(bmp, 0, 0, cw, ch);
+      bmp.close();
+      // 压缩分支一律 jpeg：canvas 编码选的就是 image/jpeg，
+      // 这里写死，和下面 toDataURL 的第一个参数保持一致。
+      // 逐级降质量：先把图压到目标体积内，再交出去。
+      // 下限判断用常量，不用 q <= 0.5：0.85 每级减 0.15 是浮点运算，
+      // 会走到 0.3999999，等于在下限之外又白压一级，图更糊却没换来体积。
+      const MIN_QUALITY = 0.5;
+      const tryQuality = (q) => {
+        const url = cv.toDataURL("image/jpeg", q);
+        const b64 = url.slice(url.indexOf(",") + 1);
+        // 4/3 是 base64 相对二进制的膨胀率，这里按 base64 长度估体积。
+        if(b64.length * 0.75 <= 900 * 1024 || q <= MIN_QUALITY + 1e-9){
+          resolve({b64: b64, media: "image/jpeg"});
+          return;
+        }
+        tryQuality(Math.max(MIN_QUALITY, q - 0.15));
+      };
+      tryQuality(0.85);
+    }).catch(() => {
+      fail();
+    });
+  });
+}
+
+/* ---------- 拍照链第一步：本地裁剪 ----------
+
+   选完图先只在本地里裁，不送任何请求。两个原因：
+   一是范围外的画面根本不该离开手机——用户圈的是中间那张表格，
+      边上拍到的是客厅和家人，送上去就是把没想给的内容交出去；
+   二是识别要等模型几十秒，范围没定就送，裁错了得整张重跑。
+
+   所以这里只解码、显示、等用户确认范围。确认之后才编码上传。
+*/
+/* 旧的「拍一张记录」选图回调已删除：记事本式录入有自己的输入框
+   （note-photo-input / note-attach-input），走 notePickImage / noteAttachExtra。
+   留着这个回调会和新的重复触发——同一次选图既进旧草稿又进新草稿，
+   用户看到两份内容，而其中一份并不是他要的那条。 */
+
+
+// 裁剪状态。rect 用比例（0~1）存，不存像素：
+// 预览框宽度和真实图宽不一样，存像素的话一改布局选区就跑偏。
+let cropState = null;   // { b64, media, w, h, rect:{x,y,w,h} }
+
+// 这一轮拍照操作的代次。每选一张新图、每取消一次都自增。
+// 裁剪要等图片解码、还要等一次 canvas 编码，这两步都是异步的。
+// 没有代次的话会出现这个顺序：点了「就用这个范围」→ 编码还没回来，
+// 用户等不及点了取消或重选 → 旧图的编码结果这时才回来，照原样送出识别，
+// 屏幕上明明是刚取消过，识别回来的却是那张已经不要的图。
+// 送出前、请求回来后各核一次，对不上就整个丢弃。
+let photoSeq = 0;
+
+// 作废当前这一轮拍照操作。所有「关闭裁剪界面」的路径都必须调它：
+// 点取消按钮、点弹层外的遮罩、重拍重选、换一张图。
+// 漏掉任何一条，那条路径就会变成缺口——监督实测点遮罩关闭后，
+// 迟到的旧编码照样送出了 1 次识别，弹层还重新打开了一份草稿，
+// 而用户明明已经关掉了这个界面。统一走一个函数就不会漏。
+function invalidatePhoto(){
+  cropState = null;
+  photoSeq += 1;
+}
+
+function renderPhotoCrop(b64, media){
+  const img = new Image();
+  img.onload = () => {
+    // 每张新图都是一轮新的操作。代次自增后，上一张图还在飞的
+    // 编码或识别结果回来时会对不上号，被整个丢弃。
+    photoSeq += 1;
+    cropState = {b64: b64, media: media, w: img.naturalWidth, h: img.naturalHeight,
+                 rect: {x: 0.08, y: 0.08, w: 0.84, h: 0.84}};
+    let h = '<h2 id="sheet-title">选要识别的范围</h2>'
+       + '<div class="sub">拖动四角调整范围，只有框里的内容会送去做识别。'
+       + '不想裁就用整张。</div>'
+       + '<div class="crop" id="crop-box">'
+       + '<img id="crop-img" alt="待裁剪的照片">'
+       + '<div class="mask" id="crop-mt"></div>'
+       + '<div class="mask" id="crop-mb"></div>'
+       + '<div class="mask" id="crop-ml"></div>'
+       + '<div class="mask" id="crop-mr"></div>'
+       + '<div class="box" id="crop-r"><i class="h tl"></i><i class="h tr"></i>'
+       + '<i class="h bl"></i><i class="h br"></i></div>'
+       + '</div>'
+       + '<div class="sub" style="margin-top:8px" id="crop-size"></div>'
+       + '<div style="margin-top:12px;display:flex;flex-direction:column;gap:8px">'
+       + '<button class="btn primary" id="crop-ok">就用这个范围</button>'
+       + '<button class="btn ghost" id="crop-all">用整张</button>'
+       + '<button class="btn ghost" id="crop-retry">重拍 / 重选</button>'
+       + '<button class="btn ghost" data-close-sheet>取消</button></div>'
+       + '<div class="notice" style="margin-top:10px">图片先在本机裁剪，'
+       + '确认范围后才会送去做识别。取消就不会上传，也不会记任何东西。</div>';
+    $("sheet-body").innerHTML = h;
+    $("sheet").classList.add("open");
+    $("crop-img").src = "data:" + media + ";base64," + b64;
+    drawCrop();
+    bindCropDrag();
+  };
+  img.onerror = () => {
+    // 解码失败保留预览，让用户重选，不悄悄退回上传完整原图。
+    setStatus("这张图读不出来，换一张试试");
+  };
+  img.src = "data:" + media + ";base64," + b64;
+}
+
+function drawCrop(){
+  if(!cropState) return;
+  const box = $("crop-box");
+  if(!box) return;
+  // 每次重绘前先夹回图内：拖拽过程中可能把选区推出边界，
+  // 不夹的话导出的范围和用户看到的不一致。
+  const r = clampCrop(cropState.rect);
+  cropState.rect = r;
+  const left = r.x * 100, top = r.y * 100;
+  const width = r.w * 100, height = r.h * 100;
+  const right = (r.x + r.w) * 100, bottom = (r.y + r.h) * 100;
+  const sel = $("crop-r");
+  sel.style.left = left + "%";
+  sel.style.top = top + "%";
+  sel.style.width = width + "%";
+  sel.style.height = height + "%";
+  // 四块遮罩盖住范围外：所见即所得，用户看到的暗处就是不送的部分。
+  // 四边都要盖：只盖顶部的话，选框下方和左右还是亮的，
+  // 用户会以为那些画面也一起送了上去。
+  const mt = $("crop-mt"), mb = $("crop-mb"), ml = $("crop-ml"), mr = $("crop-mr");
+  if(mt){ mt.style.left = "0"; mt.style.right = "0"; mt.style.top = "0";
+          mt.style.height = top + "%"; }
+  if(mb){ mb.style.left = "0"; mb.style.right = "0"; mb.style.top = bottom + "%";
+          mb.style.bottom = "0"; }
+  if(ml){ ml.style.left = "0"; ml.style.top = top + "%";
+          ml.style.width = left + "%"; ml.style.height = height + "%"; }
+  if(mr){ mr.style.left = right + "%"; mr.style.right = "0"; mr.style.top = top + "%";
+          mr.style.width = (100 - right) + "%"; mr.style.height = height + "%"; }
+  // 尺寸说明按真实像素算：用户要知道送出去的是多大一张，
+  // 不是预览框里看着的大小。
+  const px = Math.round(cropState.w * r.w), py = Math.round(cropState.h * r.h);
+  $("crop-size").textContent = "将送出 " + px + " × " + py + " 像素（原图 "
+    + cropState.w + " × " + cropState.h + "）";
+}
+
+// 把选区夹回图内。最小尺寸和固定对边都要约束，否则会出现两种难看的结果：
+// 一是选区跑出画面，框外的部分用户看不见却仍然被当成已选范围送上去；
+// 二是拖一个角时对边跟着移动，选框像在飘，用户对不准想圈的地方。
+const CROP_MIN = 0.06;
+
+function clampCrop(r){
+  const min = CROP_MIN;
+  let w = Math.max(min, Math.min(1, r.w));
+  let h = Math.max(min, Math.min(1, r.h));
+  let x = Math.max(0, Math.min(1 - w, r.x));
+  let y = Math.max(0, Math.min(1 - h, r.y));
+  return {x: x, y: y, w: w, h: h};
+}
+
+function bindCropDrag(){
+  const box = $("crop-box");
+  if(!box) return;
+  let mode = "";   // move | tl | tr | bl | br
+  let start = null;
+
+  const point = (e) => {
+    const b = box.getBoundingClientRect();
+    const t = e.touches ? e.touches[0] : e;
+    // 高度必须从 getBoundingClientRect() 取。写 box.height 取到的是 undefined：
+    // 那个属性在 DOM 元素上不存在，除出来是 NaN。NaN 参与比较全部为 false，
+    // 于是上下方向的拖动一条都不生效——用户只能左右拉，选区高度调不了，
+    // 而代码看起来完全正常，因为没有任何报错。
+    return {x: (t.clientX - b.left) / b.width, y: (t.clientY - b.top) / b.height};
+  };
+
+  box.addEventListener("pointerdown", (e) => {
+    const h = e.target.className || "";
+    mode = h.indexOf("tl") >= 0 ? "tl" : h.indexOf("tr") >= 0 ? "tr"
+         : h.indexOf("bl") >= 0 ? "bl" : h.indexOf("br") >= 0 ? "br" : "move";
+    start = {p: point(e), r: Object.assign({}, cropState.rect)};
+    box.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+  box.addEventListener("pointermove", (e) => {
+    if(!mode || !start) return;
+    e.preventDefault();
+    const p = point(e);
+    const dx = p.x - start.p.x, dy = p.y - start.p.y;
+    const r = cropState.rect;
+    if(mode === "move"){
+      // 整体平移，不能拖出画面：范围跑出去了，框外的部分用户看不见，
+      // 却仍然被当成「已选范围」送上去。
+      r.x = Math.max(0, Math.min(1 - r.w, start.r.x + dx));
+      r.y = Math.max(0, Math.min(1 - r.h, start.r.y + dy));
+    }else{
+      // 拖角改大小。对边固定，这样拖动方向和手指一致；
+      // 若四角都能自由移动，用户拖右上角时左下角会跟着飘。
+      const r0 = start.r;
+      // 关键：动的那条边必须夹在「固定对边 − 最小尺寸」以内。
+      // 反过来做（先让宽高变负，再靠 clampCrop 把整框平移回画面内）
+      // 会把固定对边一起挪走——监督实测把左上角拖过原右下角时，
+      // 右下从 .92 漂到 1，框整个翻到另一边，用户圈中的范围变了。
+      // 这里固定对边的坐标从头到尾不参与计算，所以漂不动。
+      const min = CROP_MIN;
+      const edge = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+      if(mode === "br"){
+        // 左上固定：左边和上边原样不动。
+        const nr = edge(r0.x + r0.w + dx, r0.x + min, 1);
+        const nb = edge(r0.y + r0.h + dy, r0.y + min, 1);
+        r.x = r0.x; r.y = r0.y; r.w = nr - r0.x; r.h = nb - r0.y;
+      }else if(mode === "tr"){
+        // 左下固定。
+        const nr = edge(r0.x + r0.w + dx, r0.x + min, 1);
+        const nb = edge(r0.y + dy, 0, r0.y + r0.h - min);
+        r.x = r0.x; r.y = nb; r.w = nr - r0.x; r.h = r0.y + r0.h - nb;
+      }else if(mode === "bl"){
+        // 右上固定。
+        const nl = edge(r0.x + dx, 0, r0.x + r0.w - min);
+        const nb = edge(r0.y + r0.h + dy, r0.y + min, 1);
+        r.x = nl; r.y = r0.y; r.w = r0.x + r0.w - nl; r.h = nb - r0.y;
+      }else{
+        // tl：右下固定。
+        const nl = edge(r0.x + dx, 0, r0.x + r0.w - min);
+        const nb = edge(r0.y + dy, 0, r0.y + r0.h - min);
+        r.x = nl; r.y = nb; r.w = r0.x + r0.w - nl; r.h = r0.y + r0.h - nb;
+      }
+      // 收尾仍过一次 clampCrop：正常路径下它是空操作，
+      // 但浮点误差或异常输入时兜底，保证四条边始终在画面内。
+      const fin = clampCrop(r);
+      r.x = fin.x; r.y = fin.y; r.w = fin.w; r.h = fin.h;
+    }
+    drawCrop();
+  });
+  const end = () => { mode = ""; start = null; };
+  box.addEventListener("pointerup", end);
+  box.addEventListener("pointercancel", end);
+}
+
+// 按当前范围裁出真实的图。返回 {b64, media}，失败 reject。
+// 只在这里编码一次：识别、保存都用这一份，不会出现「送识别的图」
+// 和「存档依据的图」不是同一张的情况。
+function cropToCompressedB64(){
+  return new Promise((resolve, reject) => {
+    if(!cropState) { reject(new Error("没有待裁剪的图")); return; }
+    const s = cropState;
+    const r = s.rect;
+    const sx = Math.round(s.w * r.x), sy = Math.round(s.h * r.y);
+    const sw = Math.max(1, Math.round(s.w * r.w));
+    const sh = Math.max(1, Math.round(s.h * r.h));
+    const img = new Image();
+    img.onload = () => {
+      // 长边压到 1600 以内再编码：手机拍一张五六 MB 是常事，
+      // 直接送既慢又可能超服务端限制。裁剪已经去掉一部分，
+      // 这里再压一次，两级都按同一范围算。
+      const scale = Math.min(1, PHOTO_MAX_EDGE / Math.max(sw, sh));
+      const cw = Math.max(1, Math.round(sw * scale));
+      const ch = Math.max(1, Math.round(sh * scale));
+      const cv = document.createElement("canvas");
+      cv.width = cw; cv.height = ch;
+      const ctx = cv.getContext("2d");
+      if(!ctx){ reject(new Error("浏览器不支持画布")); return; }
+      ctx.drawImage(img, sx, sy, sw, sh, 0, 0, cw, ch);
+      const MIN_QUALITY = 0.5;
+      const tryQuality = (q) => {
+        const url = cv.toDataURL("image/jpeg", q);
+        const b64 = url.slice(url.indexOf(",") + 1);
+        if(b64.length * 0.75 <= 900 * 1024 || q <= MIN_QUALITY + 1e-9){
+          resolve({b64: b64, media: "image/jpeg", w: cw, h: ch});
+          return;
+        }
+        tryQuality(Math.max(MIN_QUALITY, q - 0.15));
+      };
+      tryQuality(0.85);
+    };
+    img.onerror = () => reject(new Error("这张图解码失败了，可以重选一张"));
+    img.src = "data:" + s.media + ";base64," + s.b64;
+  });
+}
+
+/* 整张图直接压缩，不裁剪。识别默认就走这条：用户点一下「读出文字」
+   就该看到结果，不该先被带去裁剪。裁剪是可选的那条——图上只有中间
+   一块是要记的、边上拍到的是客厅和家人时，他才需要自己圈范围。 */
+function wholeImageB64(b64, media){
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const w = img.naturalWidth, h = img.naturalHeight;
+      const scale = Math.min(1, PHOTO_MAX_EDGE / Math.max(w, h));
+      const cw = Math.max(1, Math.round(w * scale));
+      const ch = Math.max(1, Math.round(h * scale));
+      const cv = document.createElement("canvas");
+      cv.width = cw; cv.height = ch;
+      const ctx = cv.getContext("2d");
+      if(!ctx){ reject(new Error("浏览器不支持画布")); return; }
+      ctx.drawImage(img, 0, 0, w, h, 0, 0, cw, ch);
+      const MIN_QUALITY = 0.5;
+      const tryQuality = (q) => {
+        const url = cv.toDataURL("image/jpeg", q);
+        const out = url.slice(url.indexOf(",") + 1);
+        if(out.length * 0.75 <= 900 * 1024 || q <= MIN_QUALITY + 1e-9){
+          resolve({b64: out, media: "image/jpeg"});
+          return;
+        }
+        tryQuality(Math.max(MIN_QUALITY, q - 0.15));
+      };
+      tryQuality(0.85);
+    };
+    img.onerror = () => reject(new Error("这张图解码失败了，可以重选一张"));
+    img.src = "data:" + (media || "image/jpeg") + ";base64," + b64;
+  });
+}
+
+$("sheet").addEventListener("click", async (e) => {
+  // 取消裁剪：不识别、不保存，也不把旧结果写到新图上。
+  if(e.target.closest("[data-close-sheet]") && cropState){
+    cropState = null;
+    // 取消就是作废这一轮。代次自增后，任何还在飞的编码或识别结果
+    // 回来时都对不上号，会被整个丢弃，不会落成一条新草稿。
+    invalidatePhoto();
+    // 回到草稿，不是关掉整个弹层。裁剪只是这条草稿里的一个步骤，
+    // 用户可能已经打了字、选好了人，关掉就等于把这些全丢了。
+    if(noteCtx){
+      renderNoteSheet();
+    }else{
+      $("sheet").classList.remove("open");
+      personStack = [];
+    }
+    return;
+  }
+  if(e.target.id === "crop-all" && cropState){
+    // 用整张是一个明确动作，不是默认行为：用户得自己说「这张全都要」。
+    cropState.rect = {x: 0, y: 0, w: 1, h: 1};
+    drawCrop();
+    return;
+  }
+  if(e.target.id === "crop-retry"){
+    // 重拍重选同样是新的一轮：旧图不要再被送出去识别。
+    invalidatePhoto();
+    // 回到草稿再打开选图。原来这里点 #photo-input，那个 input 已随旧拍照流
+    // 一起退役，点了没有任何反应——按钮看得见、按下去没动静。
+    if(noteCtx) renderNoteSheet();
+    setTimeout(() => { const i = $("note-photo-input"); if(i) i.click(); }, 60);
+    return;
+  }
+  if(e.target.id === "crop-ok" && cropState){
+    const btn = e.target;
+    // 记住这一轮的代次。编码是异步的，中间用户可能取消或换图，
+    // 回来后必须核对还是不是同一轮，不是就把结果丢掉。
+    const mySeq = photoSeq;
+    btn.disabled = true;
+    btn.textContent = "正在送出…";
+    setStatus("正在识别…");
+    try{
+      const picked = await cropToCompressedB64();
+      // 编码期间取消或换图了：这一轮已经不算数，不要再往下送识别。
+      // 少了这道核对，用户取消之后屏幕上会突然多出一份他不想要的草稿，
+      // 而且那张图是他明确说不要的。
+      if(mySeq !== photoSeq || !cropState){
+        btn.disabled = false;
+        btn.textContent = "就用这个范围";
+        return;
+      }
+      // 写回记事本草稿，不是旧的 photoCtx（那个对象已经没人读了）。
+      // 少了这一步，用户看到「正在送出」、也看到「读完了」，
+      // 草稿里却什么内容都没有——图白选了，字白识别了。
+      if(!noteCtx) return;
+      // 走和加图自动识别同一条路：文字并进正文框、提示行写清把握，
+      // 失败时也不卡死。两边各写一遍识别逻辑，改一处漏一处。
+      // 第四参把「先选范围」这条接回原来那张图的识别状态，
+      // 不让自动识别插进去的那段在正文里留两遍。
+      noteCtx.cropped = true;
+      await noteRunOcr(picked.b64, picked.media, true,
+                       noteFindRead(noteCtx.b64));
+      if(mySeq !== photoSeq || !noteCtx) return;
+      // 裁剪这一轮结束了。不清掉 cropState 的话，回到草稿之后点
+      // 「再想想」会被上面那个 data-close-sheet + cropState 的分支接住，
+      // 只是重画一次弹层、关不掉——用户想收手的时候收不了。
+      cropState = null;
+      // 回到草稿：裁剪只是这条草稿里的一个步骤，不是另一个界面。
+      // renderNoteSheet 用 noteCtx.day 重画输入框，日期自然带过来。
+      // 原来这里整块替换弹层内容，草稿上的字、已选的图、语音按钮
+      // 全部消失，用户被留在裁剪界面里，想继续写只能关掉重来。
+      renderNoteSheet();
+    }catch(err){
+      btn.disabled = false;
+      btn.textContent = "就用这个范围";
+      setStatus("没读出来：" + err.message);
+    }
+  }
+});
+
+// 核对页：模型读到的每个字段单独一个勾选框，默认只勾它自己有把握的。
+// 看不清的地方单独列出来，不让「看不清」悄悄变成一条事实。
+/* ---------- 拍照链第三步：可编辑的图文草稿 ----------
+
+   勾选框只能决定「要不要」，不能改内容。识别把「25 分钟」读成
+   「2S 分钟」时，用户除了整条不勾没有别的办法——要么忍着一个错字进记忆，
+   要么把对的部分也一起丢掉。所以这里改成能改的草稿。
+
+   两条边界写死在实现里：
+   1. 模型读到的原文和本人改后的内容分开存。来源写清哪些是模型读的、
+      哪些是本人核对/补充的，不把改动冒记为模型原文或孩子自述；
+   2. 保存时用草稿里的最终值，不能用 read.fields 反盖。
+*/
+/* 旧的 photoCtx 草稿（renderPhotoDraft / renderDraftFields / bindDraftInputs /
+   renderDraftAttachments / renderDraftSubjects，以及挂在 #sheet 上的 draft-* 与
+   photo-save 监听）已整体删除。记事本式录入用 noteCtx + note* 那一套，
+   两边并存会互相覆盖：旧监听以 !photoCtx 提前 return，新的 noteCtx 流程
+   根本不会触发它们，但 crop-ok 里那段仍然写 photoCtx，会把图写进一个
+   已经没人读的对象，用户看到「读完了」而草稿里什么都没有。 */
+
+/* ---------- 演示菜单 ---------- */
+$("btn-demo").addEventListener("click", () => {
+  let h = '<h2 id="sheet-title">演示设置</h2>'
+    + '<div class="sub settings-intro">模型连接、手机访问与插件配对，都在这里管理。</div>'
+    + '<section class="settings-section"><div class="settings-heading"><h3>当前身份</h3></div>'
+    + '<div class="settings-value">' + esc(meName || "本人") + '（由服务端会话确定）</div>'
+    + '<div class="sub">给谁准备礼物，在具体事项里选对象；这里不切换成别人。</div></section>'
+    + '<section class="settings-section"><div class="settings-heading"><h3>模型连接</h3>'
+    + '<span id="demo-model" role="status">检测中</span></div>'
+    + '<div class="sub" id="demo-model-detail">正在读当前配置…</div>'
+    + '<button class="btn ghost" id="demo-model-config" aria-expanded="false" aria-controls="model-config-box">配置模型服务商</button>'
+    + '<div id="model-config-box"></div></section>'
+    + '<section class="settings-section"><div class="settings-heading"><h3>手机访问</h3></div>'
+    + '<div class="sub">手机与电脑连接同一 Wi-Fi，用局域网地址打开。</div>'
+    + '<button class="btn ghost" id="demo-phone">在手机上打开</button><div id="phone-access"></div></section>'
+    + '<section class="settings-section"><div class="settings-heading"><h3>浏览器插件</h3></div>'
+    + '<div class="sub">连接后只执行你授权的代填，随时可以撤销设备。</div>'
+    + '<button class="btn ghost" id="demo-pair">连接浏览器插件</button><div id="pair-box"></div></section>'
+    + '<section class="settings-section"><div class="settings-heading"><h3>演示资料</h3></div>'
+    + '<div class="sub">商品与订单均为测试数据。购买仅作本地模拟登记，没有真实支付或配送。</div>'
+    + '<button class="btn ghost settings-danger" id="demo-reset">重置演示资料</button></section>'
+    + '<button class="btn ghost settings-close" data-close-sheet>关闭</button>';
+  $("sheet-body").innerHTML = h;
+  $("sheet").classList.add("open");
+  const paintModel = (h2) => {
+    const el = $("demo-model");
+    if(el) el.innerHTML = h2.model.ok
+      ? '<span class="state ok"><span class="dot"></span>已连接</span>'
+      : '<span class="state bad"><span class="dot"></span>未连接</span>';
+    const d = $("demo-model-detail");
+    if(d){
+      d.textContent = h2.model.ok
+        ? "现在连的是 " + (h2.model.model || "（未填模型名）")
+          + "，地址 " + (h2.model.base_url || "（未填）") + "。"
+        : "没连上：" + (h2.model.error || "原因没说") + "。可以在下面换一个接口或模型。";
+    }
+  };
+  api("/api/health").then(paintModel).catch(() => {});
+
+  /* 模型服务商：在这里填接口地址、模型名和密钥。
+     密钥只在保存时下发一次，读回来只显示「已设置 / 未设置」——
+     不让密钥顺着接口回到浏览器里。 */
+  $("demo-model-config").addEventListener("click", async () => {
+    const box = $("model-config-box"), entry = $("demo-model-config");
+    if(!box || entry.disabled) return;
+    entry.disabled = true;
+    entry.setAttribute("aria-expanded", "true");
+    box.setAttribute("aria-busy", "true");
+    box.innerHTML = '<div class="sub" role="status">正在读当前配置…</div>';
+    let cfg;
+    try{
+      cfg = await api("/api/model-config");
+    }catch(err){
+      box.innerHTML = '<div class="model-feedback" data-state="error" role="alert">没读到模型配置：' + esc(err.message) + '。可以再点一次重试。</div>';
+      return;
+    }finally{
+      entry.disabled = false;
+      box.setAttribute("aria-busy", "false");
+    }
+    box.innerHTML =
+        '<div class="model-field"><label for="mc-base">接口地址</label>'
+      + '<input id="mc-base" type="url" inputmode="url" autocomplete="url" spellcheck="false" aria-describedby="mc-base-help"'
+      + ' placeholder="https://example.com/v1" value="' + esc(cfg.base_url || "") + '">'
+      + '<p class="field-help" id="mc-base-help">填 OpenAI 兼容接口，到 /v1 为止；需要 http:// 或 https:// 开头。</p></div>'
+      + '<div class="model-field"><label for="mc-model">模型名</label>'
+      + '<input id="mc-model" type="text" autocomplete="off" spellcheck="false" aria-describedby="mc-model-help"'
+      + ' placeholder="step/step-5-preview" value="' + esc(cfg.model_name || "") + '">'
+      + '<p class="field-help" id="mc-model-help">与服务商提供的模型名称保持一致。</p></div>'
+      + '<div class="model-field"><label for="mc-key">密钥 <span class="badge">选填</span></label>'
+      + '<input id="mc-key" type="password" autocomplete="new-password" aria-describedby="mc-key-help"'
+      + ' placeholder="' + (cfg.has_api_key ? "已设置；留空保留原密钥" : "接口无需密钥时留空") + '">'
+      + '<p class="field-help" id="mc-key-help">只发送新填写的值，读取时不回显。'
+      + (cfg.has_api_key ? '要移除已保存的密钥，请点「清空密钥」。' : '不要把密钥发到聊天里。') + '</p></div>'
+      + '<div class="model-actions"><button class="btn primary" id="mc-save">保存并测试连接</button>'
+      + (cfg.has_api_key ? '<button class="btn ghost settings-danger" id="mc-clearkey">清空密钥</button>' : '')
+      + '<button class="btn ghost" id="mc-cancel">收起</button></div>'
+      + '<div id="mc-msg" class="model-feedback" role="status" aria-live="polite"></div>';
+    const msg = $("mc-msg");
+    const feedback = (state, text) => {
+      msg.dataset.state = state;
+      msg.setAttribute("role", state === "error" ? "alert" : "status");
+      msg.textContent = text;
+    };
+    const setPending = (pending) => {
+      box.setAttribute("aria-busy", String(pending));
+      entry.disabled = pending;
+      box.querySelectorAll("button").forEach((button) => {
+        button.disabled = pending;
+        button.setAttribute("aria-disabled", String(pending));
+      });
+    };
+    ["mc-base", "mc-model"].forEach((id) => {
+      const field = $(id);
+      field.addEventListener("blur", () => {
+        const value = field.value.trim();
+        const invalid = !value || (id === "mc-base" && !/^https?:\/\//.test(value));
+        field.setAttribute("aria-invalid", String(invalid));
+        if(invalid) feedback("error", id === "mc-base" ? "接口地址需要 http:// 或 https:// 开头，请核对后保存。" : "请填写服务商提供的模型名再保存。");
+      });
+      field.addEventListener("input", () => {
+        if(field.getAttribute("aria-invalid") === "true") field.setAttribute("aria-invalid", "false");
+      });
+    });
+    $("mc-cancel").addEventListener("click", () => {
+      if(box.getAttribute("aria-busy") === "true") return;
+      box.innerHTML = "";
+      entry.setAttribute("aria-expanded", "false");
+      entry.focus();
+    });
+    const ck = $("mc-clearkey");
+    if(ck) ck.addEventListener("click", async () => {
+      if(box.getAttribute("aria-busy") === "true") return;
+      setPending(true);
+      feedback("loading", "正在清空密钥…");
+      try{
+        await post("/api/model-config/clear-key", {});
+        $("mc-key").value = "";
+        $("mc-key").placeholder = "已清空；接口无需密钥时留空";
+        feedback("success", "密钥已清空，现在按匿名请求这个接口。");
+        try{ paintModel(await api("/api/health")); }catch(_){ /* 已清空不能因探活失败改报未清空。 */ }
+      }catch(err){
+        feedback("error", "没清成：" + err.message + "。原配置未在界面上清除，可以重试。");
+      }finally{ setPending(false); }
+    });
+    $("mc-save").addEventListener("click", async () => {
+      if(box.getAttribute("aria-busy") === "true") return;
+      const base = $("mc-base").value.trim(), name = $("mc-model").value.trim(), key = $("mc-key").value;
+      const invalidBase = !/^https?:\/\//.test(base);
+      $("mc-base").setAttribute("aria-invalid", String(invalidBase));
+      $("mc-model").setAttribute("aria-invalid", String(!name));
+      if(invalidBase || !name){
+        feedback("error", invalidBase ? "接口地址需要 http:// 或 https:// 开头，请核对后保存。" : "请填写服务商提供的模型名再保存。");
+        (invalidBase ? $("mc-base") : $("mc-model")).focus();
+        return;
+      }
+      setPending(true);
+      feedback("loading", "正在保存并测试连接…");
+      try{
+        const r = await post("/api/model-config", {base_url: base, model_name: name, api_key: key});
+        $("mc-key").value = "";
+        $("mc-key").placeholder = r.has_api_key ? "已设置；留空保留原密钥" : "接口无需密钥时留空";
+        feedback(r.model.ok ? "success" : "warning", r.model.ok
+          ? "已保存并连上了：" + (r.model.sample || "连接测试通过")
+          : "已保存，但没连上：" + (r.model.error || "原因没说") + "。地址和模型名再核对一下。");
+        paintModel({model: r.model});
+      }catch(err){
+        feedback("error", "没保存：" + err.message + "。输入还在，核对后可以重试。");
+      }finally{ setPending(false); }
+    });
+  });
+  $("demo-reset").addEventListener("click", async () => {
+    if(!confirm("重置会清空当前记录、事项和订单，确定吗？")) return;
+    await api("/api/reset", {method: "POST"});
+    $("sheet").classList.remove("open");
+    await renderStream(); await renderSide();
+  });
+
+  /* 手机入口：把局域网地址和二维码摊出来。地址取不到就明说，
+     不给一个点不开的链接。 */
+  $("demo-phone").addEventListener("click", async () => {
+    const box = $("phone-access");
+    if(!box) return;
+    box.innerHTML = '<div class="sub" data-loading="phone">正在查本机地址…</div>';
+    try{
+      const d = await api("/api/phone-access");
+      if(!d.phone_urls || !d.phone_urls.length){
+        box.innerHTML = '<div class="notice">没取到本机的局域网地址。'
+          + '请确认电脑连着 Wi-Fi，而不是只开了热点或用了 USB 共享网络。</div>';
+        return;
+      }
+      let h = '<div class="sub">手机和电脑连同一个 Wi-Fi，然后用下面任一方式打开：</div>';
+      for(const u of d.phone_urls){
+        h += '<div class="receipt" style="word-break:break-all">' + esc(u) + '</div>';
+      }
+      if(d.qr_svg){
+        h += '<div style="margin:10px 0;text-align:center">' + d.qr_svg + '</div>';
+      }
+      h += '<div class="notice">' + esc(d.pwa_install_note || "") + '</div>';
+      if(d.steps && d.steps.length){
+        h += '<ol style="margin:8px 0 0 18px;padding:0;font-size:13px;color:var(--ink-2)">';
+        for(const st of d.steps) h += '<li style="margin-bottom:4px">' + esc(st) + '</li>';
+        h += '</ol>';
+      }
+      box.innerHTML = h;
+    }catch(err){
+      box.innerHTML = '<div class="notice">没查到手机访问地址：' + esc(err.message || "") + '</div>';
+    }
+  });
+
+  /* 浏览器插件配对：生成一次性配对码，用户在插件里输入它。
+     码只在本机有效、5 分钟内有效、只能用一次。 */
+  $("demo-pair").addEventListener("click", async () => {
+    const box = $("pair-box");
+    if(!box) return;
+    box.innerHTML = '<div class="sub" data-loading="pair">正在生成配对码…</div>';
+    try{
+      const d = await api("/api/extension/pair-codes", {
+        method: "POST", headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({client_name: "浏览器插件"}),
+      });
+      let h = '<div class="receipt"><b style="font-size:22px;letter-spacing:2px">'
+           + esc(d.code) + '</b><br>在浏览器插件的连接框里输入这 8 位码。</div>';
+      h += '<div class="notice">这个码 5 分钟内有效，只能用一次。'
+         + '配对后插件只按你授权的字段代填已批准的商店页面，'
+         + '可以随时在下面撤销。</div>';
+      h += '<div style="margin-top:10px">'
+         + '<button class="btn ghost" id="pair-devices">查看和撤销已连接设备</button></div>'
+         + '<div id="device-box" style="margin-top:10px"></div>';
+      box.innerHTML = h;
+      $("pair-devices").addEventListener("click", () => loadDevices());
+    }catch(err){
+      box.innerHTML = '<div class="notice">没能生成配对码：' + esc(err.message || "") + '</div>';
+    }
+  });
+});
+
+/* 已配对设备列表：只看本人的，可撤销。撤销后该设备的凭证立即失效。 */
+async function loadDevices(){
+  const box = $("device-box");
+  if(!box) return;
+  box.innerHTML = '<div class="sub" data-loading="devices">正在查已连接设备…</div>';
+  try{
+    const d = await api("/api/extension/devices");
+    if(!d.devices || !d.devices.length){
+      box.innerHTML = '<div class="sub">还没有连接过设备。</div>';
+      return;
+    }
+    let h = '<div class="sub">正在用的设备：</div>';
+    // 先声明再拼：把 inactive 提示写在 let h 之前会撞上暂时性死区，
+    // 有已撤销设备时整个列表直接抛错，界面上只看到「没读到设备列表」。
+    if(d.inactive_count){
+      h += '<div class="sub">另有 ' + d.inactive_count + ' 台已撤销或已过期的设备，不列在这里。</div>';
+    }
+    for(const dev of d.devices){
+      h += '<div class="demo-row"><span class="lbl">'
+         + esc(dev.client_name || "浏览器插件") + '</span>'
+         + '<button class="btn ghost" data-revoke="' + esc(dev.client_id) + '">撤销</button></div>';
+      h += '<div class="sub" style="margin-top:-6px">'
+         + esc(dev.revoked_at ? "已撤销" : "有效期到 " + (dev.expires_at || "").slice(0, 16)) + '</div>';
+    }
+    box.innerHTML = h;
+    box.querySelectorAll("[data-revoke]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        try{
+          await api("/api/extension/revoke", {
+            method: "POST", headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({client_id: btn.dataset.revoke}),
+          });
+          await loadDevices();
+        }catch(err){
+          box.insertAdjacentHTML("beforeend",
+            '<div class="notice">撤销失败：' + esc(err.message || "") + '</div>');
+        }
+      });
+    });
+  }catch(err){
+    box.innerHTML = '<div class="notice">没读到设备列表：' + esc(err.message || "") + '</div>';
+  }
+}
+
+/* ---------- 快捷示例 ---------- */
+// 快捷示例按作品主线排：先记忆在别处被复用，再与人协商办事，
+// 送礼保留为完整执行用例。默认不把每句话都当成买礼物。
+const QUICK = [
+  "小雨这周的数学练得怎么样",
+  "她最近还想画画吗",
+  "记错了，喜欢拼图的是哥哥，妹妹喜欢画画",
+  "给小周的女儿准备生日礼物，300元以内，别和我上次送的重复",
+  "周末三家一起带孩子出去玩，我出 100 以内",
+  "现在办到哪一步了？",
+];
+$("quick").innerHTML = QUICK.map((q) => '<button type="button">' + esc(q) + '</button>').join("");
+$("quick").addEventListener("click", (e) => {
+  const b = e.target.closest("button");
+  if(!b || busy) return;
+  // 发出去的那条从横栏上消失。留着它，用户会以为没发成功、再点一次，
+  // 同一件事就办了两遍；而且「换商品后重新协商」这类状态已经变了，
+  // 旧的那句话还挂在横栏上会误导下一步。
+  // 只移除点中的这一条，其余示例留着——它们演示的是别的事情。
+  const text = b.textContent;
+  // 发出去就真的从这里消失，失败也不插回来。用户明确要求「发送后从横栏
+  // 消失」：失败了还挂在横栏上，他看着会以为刚才没点中，再点一次就把
+  // 同一件事办两遍。重发的路给在那条失败回复里，见 send() 的 catch。
+  if(b.parentNode) b.parentNode.removeChild(b);
+  // 预设 prompt 点一下就整句发出。发之前先清空输入框：send() 里虽然也会清，
+  // 但失败回填只覆盖手打的那份；预设句若曾被点进输入框，失败后会原样留在
+  // 横栏上，看着像「又给我塞回一句」，用户会再点一次、重复发同一件事。
+  input.value = "";
+  input.style.height = "auto";
+  sendBtn.disabled = true;
+  send(text, {fromPreset: true});
+});
+
+/* ---------- 启动 ---------- */
+// 先问一次「我是谁」再渲染。身份只由服务端会话给出：
+// 没有这个步骤，界面上就没有本人称呼，用户也不知道这份记忆是谁的。
+// 把页面里的脚本错误暴露出来。没有这个捕获器时，验收脚本只能读到
+// window.__paErr 的 undefined，那是什么都证明不了的——错误发生了也看不出来。
+window.__paErr = "";
+window.addEventListener("error", (e) => {
+  window.__paErr += "[error] " + (e.message || "") + " @"
+    + (e.filename || "") + ":" + (e.lineno || 0) + "\n";
+});
+window.addEventListener("unhandledrejection", (e) => {
+  const r = e.reason;
+  window.__paErr += "[unhandled] " + ((r && r.message) ? r.message : String(r)) + "\n";
+});
+
+async function boot(){
+  try{
+    const me = await api("/api/me");
+    ownerId = me.user_id;
+    meName = me.display_name || "我";
+  }catch(err){
+    // 读不到身份就不猜：留空让后续请求按服务端会话走，
+    // 界面上也不显示一个可能不对的称呼。
+    ownerId = "";
+  }
+  await renderStream();
+  await renderSide();
+}
+boot();
+
+/* ---------- 服务端换了新界面，让旧标签页自己发现 ----------
+
+   用户在手机上开着页面时改了代码，这个标签页还是旧界面：之前修好的
+   快速栏点击、报错人话全都看不到，用户看到的是「点了没反应」和
+   「出了点问题：[object Object]」，然后回来报 bug。
+
+   所以这里轮询服务端的界面版本号。发现变了不直接 reload：
+   正在输入的话会丢，正在识别的图会白跑，未保存的草稿会消失。
+   只在这三样都没有时才刷新，并在状态行说清「已更新」，让用户知道
+   刚才那一下不是页面坏了。
+*/
+const UI_REVISION = (window.__paUiRevision || "");
+const UI_POLL_MS = 5000;
+
+// 有这三种情况时不刷新，让用户先把手里的事做完。
+function uiBusy(){
+  // 1. 正在打字或粘贴，还没发出去。
+  if($("input") && $("input").value.trim()) return true;
+  // 2. 正在等一个请求回来：发送中、协商中、识别中、保存中。
+  if(busy) return true;
+  // 3. 弹层开着，里面可能有没保存的草稿（拍照核对、改字段、发起共同事项）。
+  if($("sheet") && $("sheet").classList.contains("open")) return true;
+  return false;
+}
+
+function uiUpdated(){
+  // 不打断用户：这次不刷，等下次轮询。中间用户自己发一句话也会带出新界面。
+  if(uiBusy()) return false;
+  // 弹层和输入框都空着才刷新。用 location.reload() 而不是重新渲染，
+  // 因为新界面可能改了结构，只换数据的话新旧代码混在一起更难看懂。
+  location.reload();
+  return true;
+}
+
+setInterval(() => {
+  fetch("/api/ui-revision").then((r) => r.json()).then((d) => {
+    if(d && d.revision && UI_REVISION && d.revision !== UI_REVISION){
+      uiUpdated();
+    }
+  }).catch(() => {
+    // 网络断了不提示：离线时显示未连接比弹一个更新横幅好。
+  });
+}, UI_POLL_MS);
+
+/* ---------- 手机入口：注册离线外壳，支持加到主屏 ----------
+   只缓存界面骨架，不缓存任何 /api/ 业务数据：手机从主屏点开要立刻有界面，
+   但不能因此看到过期的事项。注册失败（无 HTTPS、浏览器不支持）时静默跳过，
+   普通网页访问不受影响——这条链本来就要在没有 HTTPS 的局域网上也能用。 */
+if("serviceWorker" in navigator && window.isSecureContext !== false){
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/static/sw.js").catch(() => {});
+    // 离线外壳换了版本就重新加载页面。没有这一步时，手机上那个开着的
+    // 标签页会一直跑旧代码：预设 prompt 照旧把句子塞回输入框、发完还挂在
+    // 横栏上，而服务端明明是新的。用户没有任何理由怀疑是缓存，
+    // 只会觉得「这东西时好时坏」——正是要避免的那种体验。
+    // 沿用 uiBusy 的判断：正在打字、正在等请求、弹层里有没保存的草稿时
+    // 都不刷，让用户先把手里的事做完。
+    navigator.serviceWorker.addEventListener("message", (e) => {
+      if(!e.data || e.data.type !== "pa-sw-updated") return;
+      if(uiBusy()) return;
+      setStatus("界面已更新");
+      location.reload();
+    });
+  });
+}
+
+// t26: issuer invitations and owner-only source references. No private source is
+// sent to a shared model; a second explicit action publishes reviewed conditions.
+let notePlanDraft=null;
+async function loadPlanLastMile(planId, plan){
+  const box=$('plan-last-mile');if(!box||box.dataset.plan!==planId)return;
+  const results=await Promise.allSettled([api('/api/plan/'+planId+'/invitations'),api('/api/plan/'+planId+'/linked-notes')]);
+  if(!box.isConnected||box.dataset.plan!==planId)return;
+  let h='<h4>邀请另一个家庭参与</h4><p class="sub">生成只供你复制，不自动发送。接收者以自称家庭参与，不验证就是既有联系人；接邀请、你认可入场和接受方案分开。仅用虚构数据。</p>';
+  if(results[0].status==='fulfilled'){
+    h+='<label class="last-mile-field">邀请称呼（仅提示）<input id="invite-label" maxlength="40" placeholder="来宾一家"></label><button class="btn ghost" data-invite-create="'+esc(planId)+'">生成单次邀请</button><div id="invite-copy"></div>';
+    const items=results[0].value.invitations||[];
+    for(const i of items){const revoked=i.state==='revoked', claimed=!!i.guest_id||!!i.claimed_name;
+      h+='<div class="last-mile-source"><b>'+esc(i.label||'邀请')+'</b><div class="sub">'+esc(i.state)+' · 到期 '+esc(i.expires_at)+' · 自称 '+esc(i.claimed_name||'尚未接收')+'（未核验实名）</div>';
+      if(claimed&&!i.approved&&!revoked){
+        h+='<label class="last-mile-field">认可的家庭槽<select data-invite-slot="'+esc(i.invitation_id)+'"><option value="">新增自称家庭，不假冒联系人</option>';
+        for(const p of plan.participants||[]){if(p.owner_id!==ownerId&&Object.keys(p.conditions||{}).length===0&&['pending','invited','waiting',''].includes(p.state||''))h+='<option value="'+esc(p.participant_id)+'">明确替换候选：'+esc(p.label)+'</option>';}
+        h+='</select></label><p class="sub">替换只允许无条件、无决定的候选。你认可自称家庭槽，不替对方填写条件或接受方案。</p><button class="btn ghost" data-invite-approve="'+esc(i.invitation_id)+'" data-plan="'+esc(planId)+'">认可自称家庭</button>';
+      }else if(i.approved)h+='<p class="sub">已认可入场；不是实名核验，不是接受方案。</p>';
+      if(!revoked)h+='<button class="btn ghost" data-invite-revoke="'+esc(i.invitation_id)+'" data-plan="'+esc(planId)+'">撤回访问</button>';
+      h+='</div>';
+    }
+  }else h+='<p class="sub">邀请入口未读取：'+esc(results[0].reason.message)+'</p>';
+  h+='<h4>本人的资料来源</h4><p class="sub">这里仅本人可看。关联不代表采用，发生日期不是活动日期；共享模型只使用你再次明确公开的本方条件。</p>';
+  if(results[1].status==='fulfilled'){
+    const notes=results[1].value.notes||[];
+    if(!notes.length)h+='<div class="notice">还没有关联资料。保存资料后可选择「用于家庭活动」。</div>';
+    for(const n of notes){h+='<div class="last-mile-source" data-link-id="'+esc(n.link_id)+'"><b>'+esc(n.source_label||n.provider||'资料')+'</b><div class="sub">发生日期：'+esc(n.happened_on||'未知')+' · 来源：'+esc(n.provider||'未知')+'</div>';
+      for(const [k,v] of Object.entries(n.fields||{}))h+='<div>'+esc(k)+'：'+esc(v)+'</div>';
+      h+='<p class="notice">'+esc(n.status||'linked')+' · '+(n.used?'当前版本实际采用的公开条件来源':'已关联，尚未被当前共同方案采用')+'</p>';
+      if(n.replacement_event_id)h+='<button class="btn ghost" data-note-plan-event="'+esc(n.replacement_event_id)+'" data-note-plan-target="'+esc(planId)+'" data-replace-link="'+esc(n.link_id)+'">核对更正后的资料</button>';
+      if(['active','linked','stale','used'].includes(n.status||'active')){
+        h+='<div class="last-mile-actions"><button class="btn ghost" data-note-plan-event="'+esc(n.event_id)+'" data-note-plan-target="'+esc(planId)+'">核对并公开条件</button><button class="btn ghost" data-note-correct="'+esc(n.event_id)+'" data-plan="'+esc(planId)+'" data-link="'+esc(n.link_id)+'">更正所选字段</button><button class="btn ghost" data-note-revoke="'+esc(n.event_id)+'" data-plan="'+esc(planId)+'">撤回源资料</button><button class="btn ghost" data-note-unlink="'+esc(n.event_id)+'" data-plan="'+esc(planId)+'">解除本事项关联</button></div>';
+      }h+='</div>';
+    }
+  }else h+='<p class="sub">资料来源未读取：'+esc(results[1].reason.message)+'</p>';
+  h+='<div id="last-mile-status" class="last-mile-error" role="status" aria-live="polite"></div>';box.innerHTML=h;
+}
+async function openNotePlanLink(eventId, target='', replace=''){
+  const [source,choices]=await Promise.all([api('/api/note/'+encodeURIComponent(eventId)+'/fields'),api('/api/note/linkable-plans')]);
+  notePlanDraft={eventId,target,replace,source,choices:choices.plans||[],selected:[]};renderNotePlanLink();
+}
+function renderNotePlanLink(){const d=notePlanDraft,s=d.source;
+  let h='<h2 id="sheet-title">资料用于家庭活动</h2><p class="sub">第一步只保存本人私有来源引用，不把正文或图片给其他家庭，不自动送共同模型。</p><p>来源：'+esc(s.provider||'未知')+' · 发生日期：'+esc(s.happened_on||'未知')+'</p><div class="notice">默认没有选字段。发生日期不是活动日期；纯图片可只关联来源，不再识别。</div>';
+  for(const [k,v] of Object.entries(s.fields||{}))h+='<label class="last-mile-check"><input type="checkbox" data-note-field="'+esc(k)+'"><span><b>'+esc(k)+'</b>：'+esc(v)+'</span></label>';
+  h+='<label class="last-mile-field">用于哪件家庭活动<select id="note-plan-choice"><option value="">新建家庭活动并关联</option>';
+  for(const p of d.choices)h+='<option value="'+esc(p.plan_id)+'" '+(p.plan_id===d.target?'selected':'')+'>'+esc(p.title||p.utterance||'家庭活动')+'</option>';
+  h+='</select></label><label class="last-mile-field" id="note-plan-new-label">新事项标题<input id="note-plan-title" value="家庭活动准备" maxlength="200"></label><div id="note-plan-error" class="last-mile-error" role="alert" aria-live="polite"></div><button class="btn primary" id="note-plan-link">关联所选资料</button><button class="btn ghost" data-close-sheet>稍后再用</button>';
+  $('sheet-body').innerHTML=h;$('sheet').classList.add('open');
+  const choice=$('note-plan-choice');function mode(){$('note-plan-new-label').hidden=!!choice.value;}choice.onchange=mode;mode();
+  $('note-plan-link').onclick=async()=>{const b=$('note-plan-link');if(b.disabled)return;const selected=[...document.querySelectorAll('[data-note-field]:checked')].map(x=>x.dataset.noteField),planId=choice.value,title=$('note-plan-title').value.trim();if(!planId&&!title){$('note-plan-error').textContent='请给新事项写个标题；资料不用重录。';return;}b.disabled=true;b.textContent='正在关联…';try{const body={event_id:d.eventId,selected_fields:selected,public_conditions:{},publish_confirmed:false};if(d.replace)body.replace_link_id=d.replace;
+    const r=await post(planId?'/api/note/link-plan':'/api/plan/create-with-note',planId?{...body,plan_id:planId}:{...body,title});d.target=planId||r.plan_id||r.plan?.plan_id;if(!d.target)throw new Error('服务没有返回同一事项编号，请核实关联结果');d.selected=selected;d.replace='';renderNotePlanPublish();renderSidePlans();
+  }catch(e){$('note-plan-error').textContent='未关联：'+e.message+'。原文与选择保留，可重试。';b.disabled=false;b.textContent='关联所选资料';}};
+}
+function renderNotePlanPublish(){const d=notePlanDraft;
+  let h='<h2 id="sheet-title">已关联，还未公开</h2><p class="notice">第二步可把你核对过的值作为本次公开条件。其他家庭可见，只公开下面明确选中的条件；不公开私有原文、图片或全部来源，不新增长期分享授权。</p><p class="sub">所选私有字段：'+esc(d.selected.join('、')||'仅来源')+'。活动日期需另核，不能套用发生日期。</p>';
+  h+='<p class="sub">只能选择本次已选字段中的原值，不把正文偷偷拆改成条件。要改时间或地点，先更正源字段再重新核对。</p>';
+  const values=d.selected.filter(k=>k!=='正文'&&String(d.source.fields?.[k]??'').length<=500).map(k=>({key:k,value:String(d.source.fields?.[k]??'')}));if(!values.length)h+='<div class="notice">所选只有私有正文或无短字段，不能拿全文当时间或地点。先回事项更正具体字段，再核对是否公开。</div>';
+  for(const key of PLAN_KEYS){h+='<label class="last-mile-check"><input type="checkbox" data-public-key="'+esc(key)+'"><span>公开为「'+esc(key)+'」</span></label><label class="last-mile-field">选择已核对的源字段<select data-public-value="'+esc(key)+'"><option value="">不公开</option>';for(const v of values)h+='<option value="'+esc(v.value)+'">'+esc(v.key)+'：'+esc(v.value)+'</option>';h+='</select></label>';}
+  h+='<label class="last-mile-check"><input type="checkbox" id="publish-confirm"><span>我已核对这些值，同意本事项其他家庭可见</span></label><div id="note-plan-error" class="last-mile-error" role="alert"></div><button class="btn primary" id="note-plan-publish">确认公开本方条件</button><button class="btn ghost" data-plan-reopen="'+esc(d.target)+'">暂不公开，回到事项</button>';
+  $('sheet-body').innerHTML=h;
+  $('note-plan-publish').onclick=async()=>{const conds={};document.querySelectorAll('[data-public-key]:checked').forEach(e=>{const x=[...document.querySelectorAll('[data-public-value]')].find(v=>v.dataset.publicValue===e.dataset.publicKey);if(x?.value.trim())conds[e.dataset.publicKey]=x.value.trim();});if(!Object.keys(conds).length||!$('publish-confirm').checked){$('note-plan-error').textContent='请选择具体公开条件并勾选确认；不勾选就不会公开。';return;}const b=$('note-plan-publish');b.disabled=true;b.textContent='正在保存…';try{await post('/api/note/link-plan',{event_id:d.eventId,plan_id:d.target,selected_fields:d.selected,public_conditions:conds,publish_confirmed:true});await openPlan(d.target);setStatus('本方条件已公开，是否实际采用请看当前版本来源；需要重排再重新确认。');}catch(e){$('note-plan-error').textContent=e.message+'。输入保留，可重试。';b.disabled=false;b.textContent='确认公开本方条件';}};
+}
+async function openNoteSourceAction(eventId,planId,linkId,kind){const s=await api('/api/note/'+encodeURIComponent(eventId)+'/fields');
+  let h='<h2 id="sheet-title">'+(kind==='correct'?'更正来源字段':'撤回源资料')+'</h2><p class="notice">这会使依赖本资料的未完方案待重排、旧接受失效。已完成历史保留；不会撤销别人已导出的内容。</p>';
+  if(kind==='correct'){for(const [k,v] of Object.entries(s.fields||{}))h+='<label class="last-mile-field">'+esc(k)+'<input data-source-edit="'+esc(k)+'" value="'+esc(v)+'" maxlength="2000"></label>';h+='<p class="sub">可核对补一项具体字段，不能把记录日期当活动日期；补字段后仍需重新选中并明确公开。</p><label class="last-mile-field">新增字段名称<input id="source-new-key" maxlength="60" placeholder="时间"></label><label class="last-mile-field">本人核对的值<input id="source-new-value" maxlength="2000" placeholder="周日上午"></label>';}
+  h+='<label class="last-mile-check"><input type="checkbox" id="source-confirm"><span>确认'+(kind==='correct'?'保存更正，随后重新核对引用与公开条件':'撤回源资料，不再用于未完方案')+'</span></label><div id="note-plan-error" class="last-mile-error" role="alert"></div><button class="btn primary" id="source-action">确认'+(kind==='correct'?'更正':'撤回')+'</button><button class="btn ghost" data-plan-reopen="'+esc(planId)+'">返回事项</button>';$('sheet-body').innerHTML=h;$('sheet').classList.add('open');
+  $('source-action').onclick=async()=>{if(!$('source-confirm').checked){$('note-plan-error').textContent='请勾选确认；未确认不改变源资料。';return;}const b=$('source-action');b.disabled=true;b.textContent='正在处理…';try{const payload={};document.querySelectorAll('[data-source-edit]').forEach(x=>payload[x.dataset.sourceEdit]=x.value);if(kind==='correct'&&$('source-new-key').value.trim()){const key=$('source-new-key').value.trim(),value=$('source-new-value').value.trim();if(!value)throw new Error('新增字段须有核对值');payload[key]=value;}const r=await post('/api/life-events/'+eventId+'/'+kind,kind==='correct'?{payload}:{ });if(kind==='correct')await openNotePlanLink(r.new_event_id,planId,linkId);else await openPlan(planId);}catch(e){$('note-plan-error').textContent=e.message;b.disabled=false;b.textContent='重试';}};
+}
+document.addEventListener('click',async e=>{const b=e.target.closest('[data-note-plan-event],[data-invite-create],[data-invite-approve],[data-invite-revoke],[data-note-correct],[data-note-revoke],[data-note-unlink]');if(!b||b.disabled)return;b.disabled=true;const prior=b.textContent;try{
+  if(b.dataset.notePlanEvent){await openNotePlanLink(b.dataset.notePlanEvent,b.dataset.notePlanTarget||'',b.dataset.replaceLink||'');return;}
+  const planId=b.dataset.plan||b.dataset.inviteCreate;
+  if(b.dataset.inviteCreate){const r=await post('/api/plan/'+planId+'/invitations',{label:$('invite-label').value.trim()||'来宾一家'});const u=new URL(r.participate_url,location.origin);if(u.origin!==location.origin||u.pathname!=='/static/participate.html'||!u.hash.startsWith('#token='))throw new Error('服务返回的参与地址不符合安全格式');$('invite-copy').innerHTML='<label class="last-mile-field">单次邀请（到期 '+esc(r.expires_at)+'）<textarea id="invite-url" readonly></textarea></label><button class="btn ghost" id="copy-invite">复制邀请</button><p class="sub">只复制，不自动发出。接收后链接单用失效；请在另一个浏览器打开。</p>';$('invite-url').value=u.href;$('copy-invite').onclick=async()=>{try{await navigator.clipboard.writeText(u.href);$('copy-invite').textContent='已复制';}catch{$('invite-url').select();setStatus('浏览器不允许自动复制，请手动复制所选邀请。');}};}
+  else if(b.dataset.inviteApprove){const slot=[...document.querySelectorAll('[data-invite-slot]')].find(x=>x.dataset.inviteSlot===b.dataset.inviteApprove);await post('/api/plan/'+planId+'/invitations/'+b.dataset.inviteApprove+'/approve',{replace_participant_id:slot?.value||''});await openPlan(planId);}
+  else if(b.dataset.inviteRevoke){if(!confirm('撤回这次邀请及已接收者的事项访问？未完约定需重核，不能撤销已导出的内容。'))return;await post('/api/plan/'+planId+'/invitations/'+b.dataset.inviteRevoke+'/revoke',{});await openPlan(planId);}
+  else if(b.dataset.noteCorrect)await openNoteSourceAction(b.dataset.noteCorrect,planId,b.dataset.link,'correct');
+  else if(b.dataset.noteRevoke)await openNoteSourceAction(b.dataset.noteRevoke,planId,'','revoke');
+  else if(b.dataset.noteUnlink){if(!confirm('解除这条资料与本事项的关联？方案需重排，源资料保留。'))return;await post('/api/note/unlink-plan',{event_id:b.dataset.noteUnlink,plan_id:planId});await openPlan(planId);}
+}catch(err){const box=$('last-mile-status');if(box)box.textContent=err.message;setStatus('未完成：'+err.message);}finally{if(b.isConnected){b.disabled=false;b.textContent=prior;}}});
+</script>
+</body>
+</html>
