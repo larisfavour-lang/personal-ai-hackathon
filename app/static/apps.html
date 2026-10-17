@@ -209,6 +209,8 @@ function personChips(){
     return '<div class="notice">还没有可记录的人物。</div>';
   }
   let h = '<div class="row">';
+  // 「全部」放最前：默认就是看全部，点某个孩子是收窄，不是进门门槛。
+  h += '<button class="chip" data-pick="" aria-pressed="' + (!picked) + '">全部</button>';
   for(const p of myPersons){
     h += '<button class="chip" data-pick="' + esc(p.person_id) + '" aria-pressed="'
        + (p.person_id === picked) + '">' + esc(p.name) + '</button>';
@@ -302,12 +304,12 @@ function renderConflict(box, d){
 /* ---------- 视图一：学习软件 ---------- */
 async function renderStudy(){
   const out = $("out");
-  /* 一般家庭就一两个孩子。人少的时候不逼他先选一个再看记录——直接按孩子
-     分组全列出来，为了看另一个孩子专门去点一下，是多出来的一步。
-     人多的时候（比如老师带一个班）才需要先选，否则一屏全是人、找不到刚记的那条。 */
-  const few = myPersons.length > 0 && myPersons.length <= 2;
-  if(!picked && !few){
-    out.innerHTML = '<div class="empty">先选一个对象。</div>';
+  /* 不设「先选一个对象」这道门。一般家庭就一两个孩子，为了看记录专门去点
+     一下人选是多出来的一步；老师带一个班时人也照样分组列着，不会糊成一片。
+     选人在这里只是筛选：点某个孩子只看他，再点一次取消筛选回到全部。 */
+  const few = myPersons.length > 0;
+  if(!few){
+    out.innerHTML = '<div class="empty">还没有可记录的人物。</div>';
     return;
   }
   out.innerHTML = '<div class="empty">正在读…</div>';
@@ -327,16 +329,47 @@ async function renderStudy(){
     return;
   }
   let h = '<div class="card"><h3>记一条进度</h3>'
-    + '<div class="meta">选对象，再写今天做了什么。保存前你可以改。</div>'
+    + '<div class="meta">默认记在第一个孩子名下；要记给别人，先点上面的人名。保存前你可以改。</div>'
     + personChips()
+    + '<label for="ta-dim">哪条线（学习维度）</label><select id="ta-dim">'
+    + STUDY_DIMS.map(d => '<option value="' + d + '">' + d + '</option>').join('')
+    + '</select>'
     + '<label for="ta-new">这次做了什么（中文，一句话）</label>'
     + '<textarea id="ta-new" placeholder="例如：自己读完了两本绘本"></textarea>'
     + '<div class="row"><button class="btn primary" id="btn-save">记下</button></div>'
     + '</div>';
 
-  h += '<div class="card"><h3>我记的进度</h3>';
+  h += '<div class="card"><h3>各条线的进度</h3>'
+    + '<p class="meta">按学习维度归。一条线很久没记，这里会直接说，不用你自己翻。</p>';
+  // 维度小结：每条线记了几次、最近一次是什么时候、说的是什么。
+  const dimStat = {};
+  for(const ev of evs){
+    const dim = (ev.payload && ev.payload["科目"]) || "未分类";
+    const cur = dimStat[dim] || (dimStat[dim] = {n: 0, last: "", lastText: ""});
+    cur.n += 1;
+    const day = String(ev.happened_on || "");
+    if(day >= cur.last){ cur.last = day; cur.lastText = ev.payload["进度"] || ""; }
+  }
+  const dimNames = STUDY_DIMS.filter(d => dimStat[d]).concat(
+    Object.keys(dimStat).filter(d => !STUDY_DIMS.includes(d)));
+  if(dimNames.length){
+    h += '<div class="meta" style="margin-bottom:8px">';
+    for(const d of dimNames){
+      const st = dimStat[d];
+      h += '<span class="pill" style="margin-right:6px">' + esc(d) + ' ' + st.n + ' 次'
+         + (st.last ? ' · 最近 ' + esc(st.last) : '') + '</span>';
+    }
+    h += '</div>';
+    // 一直没碰的线也说一句，别让人以为漏看了。
+    const idle = STUDY_DIMS.filter(d => !dimStat[d]);
+    if(idle.length){
+      h += '<div class="meta" style="margin-bottom:8px">还没记过的线：'
+         + esc(idle.join("、")) + '。</div>';
+    }
+  }
+  h += '<div class="meta" style="margin-bottom:6px">全部记录：</div>';
   if(!evs.length){
-    h += '<div class="empty">' + (few ? '还没有记录。' : '这个人还没有记录。') + '</div>';
+    h += '<div class="empty">' + (picked ? '这个人还没有记录。' : '还没有记录。') + '</div>';
   }
   const nameOf = (id) => {
     const hit = myPersons.find((p) => p.person_id === id);
@@ -344,7 +377,9 @@ async function renderStudy(){
   };
   for(const ev of evs){
     const text = (ev.payload && (ev.payload["进度"] || ev.payload["已完成项目"])) || "";
+    const dim = (ev.payload && ev.payload["科目"]) || "未分类";
     h += '<div class="meta" style="margin-top:12px">'
+       + '<span class="pill" style="margin-right:6px">' + esc(dim) + '</span>'
        + (few && nameOf(ev.subject_id) ? esc(nameOf(ev.subject_id)) + ' · ' : '')
        + esc(ev.happened_on) + ' · '
        + esc(ev.provider) + (ev.status === "superseded" ? ' · 已被更正' : '') + '</div>';
@@ -369,7 +404,7 @@ async function renderStudy(){
     try{
       const res = await post("/api/life-events", {
         source_id: "study_app", subject_id: picked, event_type: "study_progress",
-        payload: {"进度": text}, happened_on: "",
+        payload: {"进度": text, "科目": (($("ta-dim") || {}).value || "其它")}, happened_on: "",
         provider: "我在这台设备上记的", source_kind: "app",
         grants: [],
       });
@@ -588,6 +623,10 @@ async function renderConnectors(){
 
 /* ---------- 视图四：送礼管家（私有档案：选品/偏好/常用信息/上次送过什么） ---------- */
 const GIFT_RELATIONSHIPS = ["长辈", "晚辈", "同龄人", "朋友", "同事"];
+/* 学习进度的常见维度。一个孩子可以同时在很多条线上往前走，按人分只是第一层；
+   按维度看才知道哪条线在推进、哪条线很久没碰。 */
+const STUDY_DIMS = ["数学", "语文", "英语", "阅读", "练琴", "运动", "绘画", "其它"];
+const STUDY_DIM_LABEL = {};
 const GIFT_CATS = [["preference", "偏好"], ["size", "尺寸"], ["avoid", "忌讳"], ["last_gift", "上次送过什么"]];
 const GIFT_CAT_LABEL = {preference: "偏好", size: "尺寸", avoid: "忌讳", last_gift: "上次送过什么"};
 async function renderGift(){
