@@ -197,7 +197,7 @@ details[open] summary::before{transform:rotate(90deg)}
   font-size:15px;line-height:1;cursor:pointer;padding:0}
 .composer .attach[aria-expanded="true"]{background:var(--accent-soft);
   border-color:var(--accent);color:var(--ink)}
-/* 预留设备占位（t68）：虚线框 + 「开发中／未接入」标，无可点按钮。
+/* 预留设备占位（t67/t68）：虚线框 + 「建设中／未接入」标，无可点按钮。
    做成能点的样子会让人以为硬件已打通——问卷提交后不能改，所以一眼就要看出是预告。 */
 .reserved-tag{font-size:11.5px;color:var(--ink-3);border:1px solid var(--line-2);
   border-radius:999px;padding:2px 8px;margin-left:8px;white-space:nowrap}
@@ -415,7 +415,11 @@ details[open] summary::before{transform:rotate(90deg)}
 /* 配对码的 5 分钟／限一次是**那个码**的边界，不是连接的时效：
    写成更小更淡的附属小字，避免读成「连接只有 5 分钟」。 */
 .pair-code-note{margin-top:6px;font-size:12.5px;color:var(--ink-3)}
-@media (max-width:600px){
+/* 只在「窄屏 + 触摸」时隐藏桌面专用项并给出说明。
+   原来只按 max-width 判断，桌面用户把窗口拖窄同样中招：五个按钮整段消失、
+   没有任何解释，看起来像功能坏了。手机（pointer:coarse）才是真该收起来的场景；
+   桌面窄窗口保留入口，说明文字也不出现。 */
+@media (max-width:600px) and (pointer:coarse){
   .pair-desktop-only{display:none}
   .pair-phone-only{display:block}
 }
@@ -2157,7 +2161,7 @@ $("side").addEventListener("click", async (e) => {
   if(planBtn){
     // 先收侧栏再开详情：不收的话窄屏上侧栏盖住详情，用户以为点了没反应。
     try{ $("side").classList.remove("open"); }catch(_){}
-    openPlan(planBtn.dataset.openPlan);
+    openPlanChecked(planBtn.dataset.openPlan);
     return;
   }
   const taskBtn = e.target.closest("[data-open-task]");
@@ -2179,7 +2183,7 @@ $("side").addEventListener("click", async (e) => {
    用户看到的是「有一件未完事项、却点不开」。 */
 $("todo").addEventListener("click", async (e) => {
   const planBtn = e.target.closest("[data-open-plan]");
-  if(planBtn){ openPlan(planBtn.dataset.openPlan); return; }
+  if(planBtn){ openPlanChecked(planBtn.dataset.openPlan); return; }
   const taskBtn = e.target.closest("[data-open-task]");
   if(!taskBtn) return;
   const card = stream.querySelector('[data-task="' + taskBtn.dataset.openTask + '"]');
@@ -2192,6 +2196,36 @@ $("todo").addEventListener("click", async (e) => {
     setStatus("这件事没打开：" + err.message);
   }
 });
+
+/* 打开共同事项前的参与方预检（t64）。
+
+侧栏列出的共同事项来自 /api/plans，理论上都该是本人参与的；但历史上
+「条件全空也创建成功」落下的孤儿事项会出现在列表里，点下去
+/api/plan/{id} 对非参与方 404。原来这一步没有预检，也没有 try/catch，
+用户在视口里看不到任何变化——分不清是没点上、程序坏了、还是不该他看。
+
+预检只用已经拿到的 lastPlans（渲染侧栏时那份），不再多打一次接口：
+不在名单里就直接给一句能看懂的话和返回路径，不静默 return。
+名单为空时（例如深链接）照常走 openPlan，由它自己的 catch 兜底。
+*/
+async function openPlanChecked(planId){
+  const known = (lastPlans || []).some((p) => p.plan_id === planId);
+  if(lastPlans.length && !known){
+    try{ $("side").classList.remove("open"); }catch(_){}
+    setStatus("这件事不是你参与的，看不到详情");
+    // 标题要写进 sheet-body，不能去改 #sheet-title：弹层从没打开过时
+    // #sheet-title 还不存在，$("sheet-title") 是 null，赋值会抛异常，
+    // 后面整段 try 都被跳过——用户看到的还是零反馈，正是要修的那个缺陷。
+    try{
+      $("sheet-body").innerHTML = '<h2 id="sheet-title">这件事看不到</h2>'
+        + '<div class="notice bad">这件事不是你参与的，看不到详情。'
+        + '可以回到侧栏看其它事项。</div>';
+      $("sheet").classList.add("open");
+    }catch(_){}
+    return;
+  }
+  await openPlan(planId);
+}
 
 // 压栈只在这里做。fromChain=true 表示这是从关系链/返回按钮点进来的，
 // 沿着已有路径往下走；否则（侧栏、澄清按钮）当新的起点，清掉旧路径。
@@ -2719,6 +2753,15 @@ $("btn-new-plan").addEventListener("click", () => {
         byOwner[o] = byOwner[o] || {};
         byOwner[o][el.dataset.condKey] = v;
       });
+      // 本人这一方一个条件都没填：不创建。空参与方的事项落库后，
+      // 服务端不给它排方案，侧栏却一直挂着它，点下去只会 404——
+      // 那就是用户报的「侧栏有个点不开的事项」。从根上不造孤儿。
+      if(!byOwner[ownerId] || !Object.keys(byOwner[ownerId]).length){
+        $("sheet-body").querySelector(".notice").textContent =
+          "先填至少一条本人这一方的条件（比如时间或地点），再创建。"
+          + "没有条件的事项建了也排不出方案。";
+        return;
+      }
       // 只提交本人这一方。别家带条件会被服务端 403，这里索性不给他们造表单。
       const created = await post("/api/plan/create", {
         title: title, utterance: title,
@@ -4311,19 +4354,19 @@ $("btn-demo").addEventListener("click", () => {
     // 设备列表常驻：不生成配对码也看得到已加入的电脑，可单独撤销。
     + '<div style="margin-top:10px"><button class="btn ghost pair-desktop-only" id="demo-devices" aria-expanded="false" aria-controls="device-box">管理连接设备</button></div>'
     + '<div id="device-box" class="pair-desktop-only" style="margin-top:10px"></div>'
-    // 预留占位（t68）：只是先把将来会怎么接说清楚。没有接入链路、没有授权通道，
+    + '<div class="sub pair-phone-only">插件只跑在桌面 Chrome/Edge 上，手机不能安装也不能配对。在电脑上打开同一服务完成加入，回执会回到这件事里。手机上看代填回执：打开同一件事，点事项卡上的「查看代填回执」。</div></section>'
+    // 预留占位（t67/t68）：只是先把将来会怎么接说清楚。没有接入链路、没有授权通道，
     // 所以不放任何可点按钮、不发任何请求、不存凭证、不轮询。
-    // 虚线框 + 「开发中／未接入」标就是为了让人一眼看出这是预告，不是功能。
+    // 虚线框 + 「建设中／未接入」标就是为了让人一眼看出这是预告，不是功能。
     + '<section class="settings-section"><div class="settings-heading"><h3>预留设备</h3>'
-    + '<span class="reserved-tag">开发中／未接入</span></div>'
+    + '<span class="reserved-tag">建设中／未接入</span></div>'
     + '<div class="sub">下面两类还没接上，先说明它们将来会是什么、能碰哪些数据。</div>'
     + '<div class="reserved-item"><b>手机（Amoo · step x neo）</b>'
     + '<span>将来由它自己的 App 或系统助理接进来，和这台电脑上的插件是两条独立通道，'
-    + '互不需要配对码；手机只负责把事交进来、把同一件事的回执带回去。</span></div>'
+    + '互不需要配对码；手机只负责把事交进来、把同一件事的回执带回去。接入前不会读取任何数据。</span></div>'
     + '<div class="reserved-item"><b>智能家电</b>'
     + '<span>将来按一台一授权接：默认只能读状态，任何控制动作都要你本人在当次确认；'
-    + '不默认开放远程控制，不跨设备共享凭证。</span></div></section>'
-    + '<div class="sub pair-phone-only">插件只跑在桌面 Chrome/Edge 上，手机不能安装也不能配对。在电脑上打开同一服务完成加入，回执会回到这件事里。手机上看代填回执：打开同一件事，点事项卡上的「查看代填回执」。</div></section>'
+    + '不默认开放远程控制，不跨设备共享凭证。接入前不会读取任何数据。</span></div></section>'
     + '<section class="settings-section pair-desktop-only"><div class="settings-heading"><h3>演示资料</h3></div>'
     + '<div class="sub">商品与订单均为测试数据。购买仅作本地模拟登记，没有真实支付或配送。</div>'
     + '<button class="btn ghost settings-danger" id="demo-reset">重置演示资料</button>'

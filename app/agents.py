@@ -337,13 +337,18 @@ def _subject_candidates(db, owner_id, hint):
             return [_as_candidate(r) for r in named][:6]
 
     # 2) 称呼明确指向孩子时，只列关系本身就是孩子的人。
-    #    只看每个人自己的 relation，不把称呼拼进去——否则提示里带「孩子」
-    #    会让所有带备注的大人也命中，候选就失去筛选意义。
+    #    判据必须是 relation 属 CHILD_RELATIONS（own_child/friend_child/...），
+    #    不能拿中文关键词去匹配 relation 值——relation 存的是
+    #    own_child/friend_child 这类英文枚举，'孩子' in 'friend_child' 恒为 false，
+    #    于是这一步永远命中不了，直接掉到第 3 步把全部人物（含爸爸、朋友、
+    #    朋友的配偶）都列出来。那正是用户看到的「问孩子却列出爸爸」。
     if any(k in (hint or "") for k in child_keywords):
         children = [r for r in rows
-                    if any(k in (r["relation"] or "") for k in child_keywords)]
+                    if (r["relation"] or "") in _service.CHILD_RELATIONS]
         if children:
             return [_as_candidate(r) for r in children][:6]
+        # 一个孩子都没有：照实说，不退回成人名单。
+        return []
 
     # 3) 没有线索：给全部，让用户自己点。
     return [_as_candidate(r) for r in rows][:6]
@@ -711,8 +716,15 @@ def run_negotiation(db, client, task_id, max_rounds=MAX_ROUNDS):
             question = "你想送的是「%s」吗？我这边没对上号。" % hint
         else:
             question = "我没听清这次要送谁。"
+        child_scoped = any(k in (hint or "") for k in
+                          ("孩子", "女儿", "儿子", "小孩", "宝宝", "学生"))
         if candidates:
             question += "下面这些人里，你点一个就行："
+        elif child_scoped:
+            # 问的是孩子却一个都没有：照实说还没有记录在册的孩子，
+            # 不把爸爸、朋友、朋友的配偶这些成人列出来让人误点。
+            question += "我这边还没有记录在册的孩子。先告诉我是谁、"
+            question += "发生了什么，我再记下来。"
         else:
             question += "你告诉我对方叫什么，我记下来。"
         db.execute("UPDATE task SET stage='blocked', outcome=? WHERE task_id=?",

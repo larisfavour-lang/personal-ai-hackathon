@@ -1665,8 +1665,21 @@ def family_overview(db, owner_id):
         })
 
     families.sort(key=lambda f: (not f["is_me"], f["label"]))
+    # 真实家庭户数：只有这两种算一户——
+    #   ① 本人自己这一方（is_me），一个人也是一户；
+    #   ② 组里有明确配偶/同户关系的成人（same_family_confirmed），
+    #      也就是并查集被 spouse_pairs 真正合并过的组。
+    # 单人成组、没有任何配偶/同户关系的成人（例如只为送礼建的人物）**不算一户**：
+    # 他不是「另一家」，只是我认识的一个人。规则 3 照实单独列出仍然保留，
+    # 这里只是另外给一个「户数」供「说了几家／还缺几家」消费。
+    # 原来拿 len(families) 当户数，会把送礼对象、朋友这些都算成家庭，
+    # 「周末三家」的第三家缺口被悄悄填掉——那和「不拿配偶凑数」是同一条边界。
+    household = [f for f in families
+                 if f["is_me"]
+                 or any(a["same_family_confirmed"] for a in f["adults"])]
     return {"owner_id": owner_id, "families": families,
-            "known_family_count": len(families)}
+            "known_family_count": len(families),
+            "household_count": len(household)}
 
 
 def count_requested_families(text):
@@ -1781,8 +1794,14 @@ def start_group_activity(db, client, owner_id, utterance):
 
     fams = family_overview(db, owner_id)
     want = count_requested_families(text)
+    # 「说了几家 / 还缺几家」按**真实家庭户数**算，不按 family_overview 列出的条目数。
+    # 列出的条目里包含「没有家庭关系的成人」（规则 3 照实单独列出，展示是对的），
+    # 但那些不是家庭；拿他们填缺口等于拿送礼对象凑数。
+    households = fams.get("household_count", len(fams["families"]))
+    # known 仍取全部条目：回复里「按已记下的关系，知道的有：…」要如实列出
+    # 认识的人（含没有家庭关系的成人），展示口径和 family_overview 一致。
     known = fams["families"]
-    missing = max(0, (want or 0) - len(known)) if want else 0
+    missing = max(0, (want or 0) - households) if want else 0
     meta = _plan_meta(db, plan_id)
     if want:
         meta["requested_families"] = want
@@ -2383,6 +2402,40 @@ def family_update_summary(db, owner_id, utterance):
             "events": events, "resolved": True}
 
 
+CHILD_RECORD_MARKERS = ("记一下", "记录一下", "记一笔", "记下", "记录")
+CHILD_NOUNS = ("孩子", "小孩", "儿子", "女儿", "宝宝")
+RECENT_MARKERS = ("这周", "本周", "今天", "昨天", "这几天", "最近", "情况", "进度",
+                  "表现", "怎么样", "如何")
+GIFT_MARKERS = ("礼物", "送礼", "买", "购", "预算", "生日", "节日", "红包", "元以内",
+                "块钱", "下单", "订单")
+
+
+def _is_child_record(text):
+    """这句话是在记孩子的情况，不是在交办送礼或约家庭活动。
+
+    四条同时成立才算，缺一条就交给后面的既有判据：
+      1. 带记录动词（记一下/记录一下/记一笔/记下/记录）；
+      2. 提到孩子（或句子里有具体人名——人名由调用方已知列表补，这里只做粗判）；
+      3. 带近况/进度措辞（这周/今天/最近/情况/进度/表现…）；
+      4. **不帶**任何送礼或采购措辞。
+    第 4 条是关键：「给三家一起出游的孩子们准备礼物」带「礼物」，
+    「周末三家一起带孩子出去玩」带「一起出去玩」且没有记录动词，
+    都不会被这条抢走。
+    """
+    t = (text or "").strip()
+    if not t:
+        return False
+    if not any(m in t for m in CHILD_RECORD_MARKERS):
+        return False
+    if not any(k in t for k in CHILD_NOUNS):
+        return False
+    if not any(m in t for m in RECENT_MARKERS):
+        return False
+    if any(g in t for g in GIFT_MARKERS):
+        return False
+    return True
+
+
 def classify_intent(db, client, owner_id, utterance):
     """判断这句话是交办一件事、补充/纠正记录、问进展，还是在追问缺什么。
 
@@ -2403,6 +2456,16 @@ def classify_intent(db, client, owner_id, utterance):
     # 带新目标（要买什么、多少预算、送给谁）的一律不算，交给模型按交办判断。
     if _recent_purchased(db, owner_id) is not None and _is_pure_followup(text):
         return "followup"
+    # 记录句快路：`记一下/记录/记一笔 + 孩子 + 这周/今天/情况/进度/表现`
+    # 这类是在给资料，不是在交办一件送礼的事。必须走在模型判断之前：
+    # 交给模型，「孩子」会被当成送礼目标词，整句被误判成 task，
+    # 接着被要求「点一个送礼对象」——用户明确不要这个。
+    # 判据收紧到三条同时成立，避免把「给三家一起出游的孩子们准备礼物」
+    # 这类真送礼句、以及「周末三家一起带孩子出去玩」这类多家庭句抢走：
+    #   ① 带记录动词；② 提到孩子（或具体人名）；③ 带近况/进度措辞；
+    #   ④ 不带任何送礼或采购措辞。
+    if _is_child_record(text):
+        return "record"
     # 问家人近况。要在 followup 之后、模型判断之前：这句话同样可能提到孩子，
     # 交给模型容易被当成交办或问进展。只有确实带近况措辞、又没带新目标才算。
     if _wants_family_update(text) and not any(m in text for m in NEW_GOAL_MARKERS):
