@@ -3085,7 +3085,8 @@ function renderNoteSubjects(){
   }
   box.innerHTML = subs.map((p) =>
     '<button type="button" class="chip btn-chip" data-n-subject="'
-    + esc(p.person_id) + '"' + (p.person_id === cur ? ' data-cur="1"' : '')
+    + esc(p.person_id) + '" aria-pressed="' + (p.person_id === cur) + '"'
+    + (p.person_id === cur ? ' data-cur="1"' : '')
     + ' style="' + (p.person_id === cur
        ? 'border-color:var(--accent);color:var(--accent);background:var(--accent-soft)'
        : '') + '">' + esc(p.name)
