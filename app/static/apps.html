@@ -40,6 +40,17 @@ header .back{margin-left:auto;font-size:13px;color:var(--ink-2);text-decoration:
   padding:7px 14px;font-size:13.5px;color:var(--ink-2);cursor:pointer;font-family:inherit}
 .tab[aria-selected="true"]{background:var(--accent-soft);border-color:var(--accent);
   color:var(--ink);font-weight:500}
+/* 页签分两组：上面是具体小应用，下面是来源与管理。数据接入和关系分类
+   不是「又一个小应用」，平铺一行会让人以为它们和学习软件同级。 */
+.tab-groups{display:flex;flex-direction:column;gap:10px;margin-bottom:var(--space-5)}
+.tab-group{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.tab-group-label{font-size:12px;color:var(--ink-3);min-width:3.2em}
+.tab-group.sub .tab{padding:5px 11px;font-size:12.5px;color:var(--ink-3)}
+.tab-group.sub .tab[aria-selected="true"]{color:var(--ink)}
+@media (max-width:600px){
+  .tab-group-label{min-width:100%;margin-bottom:-4px}
+  .tab-group.sub{padding-left:10px;border-left:2px solid var(--line)}
+}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
   padding:var(--space-4);margin-bottom:var(--space-3)}
 .card h3{margin:0 0 2px;font-size:15px;font-weight:600}
@@ -86,12 +97,18 @@ input,textarea,select{max-width:100%;min-width:0}.mapping-grid{display:grid;grid
   <p class="sub">学习软件负责记进度，数据接入连接应用来源。周末安排根据已授权的进度
     给下一步建议，并说明依据来自哪一条。</p>
 
-  <div class="tabs" role="tablist">
-    <button class="tab" role="tab" data-view="study" aria-selected="true">学习软件</button>
-    <button class="tab" role="tab" data-view="plan" aria-selected="false">周末安排</button>
-    <button class="tab" role="tab" data-view="connectors" aria-selected="false">数据接入</button>
-    <button class="tab" role="tab" data-view="gift" aria-selected="false">送礼管家</button>
-    <button class="tab" role="tab" data-view="relclass" aria-selected="false">关系分类（建设中）</button>
+  <div class="tab-groups">
+    <div class="tab-group" role="tablist" aria-label="小应用">
+      <span class="tab-group-label">小应用</span>
+      <button class="tab" role="tab" data-view="study" aria-selected="true">学习软件</button>
+      <button class="tab" role="tab" data-view="plan" aria-selected="false">周末安排</button>
+      <button class="tab" role="tab" data-view="gift" aria-selected="false">送礼管家</button>
+    </div>
+    <div class="tab-group sub" role="tablist" aria-label="来源与管理">
+      <span class="tab-group-label">来源与管理</span>
+      <button class="tab" role="tab" data-view="connectors" aria-selected="false">数据接入</button>
+      <button class="tab" role="tab" data-view="relclass" aria-selected="false">关系分类（建设中）</button>
+    </div>
   </div>
 
   <div id="flash" class="state" role="status" aria-live="polite"
@@ -285,7 +302,11 @@ function renderConflict(box, d){
 /* ---------- 视图一：学习软件 ---------- */
 async function renderStudy(){
   const out = $("out");
-  if(!picked){
+  /* 一般家庭就一两个孩子。人少的时候不逼他先选一个再看记录——直接按孩子
+     分组全列出来，为了看另一个孩子专门去点一下，是多出来的一步。
+     人多的时候（比如老师带一个班）才需要先选，否则一屏全是人、找不到刚记的那条。 */
+  const few = myPersons.length > 0 && myPersons.length <= 2;
+  if(!picked && !few){
     out.innerHTML = '<div class="empty">先选一个对象。</div>';
     return;
   }
@@ -293,7 +314,14 @@ async function renderStudy(){
   let evs = [];
   try{
     const d = await api("/api/source/study_app");
-    evs = (d.events || []).filter((e) => e.subject_id === picked);
+    const all = d.events || [];
+    evs = few ? all.slice() : all.filter((e) => e.subject_id === picked);
+    if(few){
+      const order = {};
+      myPersons.forEach((p, i) => { order[p.person_id] = i; });
+      evs.sort((a, b) => (order[a.subject_id] - order[b.subject_id])
+        || String(b.happened_on || "").localeCompare(String(a.happened_on || "")));
+    }
   }catch(err){
     out.innerHTML = '<div class="empty">没读到记录：' + esc(err.message) + '</div>';
     return;
@@ -308,11 +336,17 @@ async function renderStudy(){
 
   h += '<div class="card"><h3>我记的进度</h3>';
   if(!evs.length){
-    h += '<div class="empty">这个人还没有记录。</div>';
+    h += '<div class="empty">' + (few ? '还没有记录。' : '这个人还没有记录。') + '</div>';
   }
+  const nameOf = (id) => {
+    const hit = myPersons.find((p) => p.person_id === id);
+    return hit ? hit.name : "";
+  };
   for(const ev of evs){
     const text = (ev.payload && (ev.payload["进度"] || ev.payload["已完成项目"])) || "";
-    h += '<div class="meta" style="margin-top:12px">' + esc(ev.happened_on) + ' · '
+    h += '<div class="meta" style="margin-top:12px">'
+       + (few && nameOf(ev.subject_id) ? esc(nameOf(ev.subject_id)) + ' · ' : '')
+       + esc(ev.happened_on) + ' · '
        + esc(ev.provider) + (ev.status === "superseded" ? ' · 已被更正' : '') + '</div>';
     h += '<div class="big">' + esc(text) + '</div>';
     h += '<div class="row"><button class="btn" data-fix="' + esc(ev.event_id) + '">更正</button>'
@@ -552,7 +586,7 @@ async function renderConnectors(){
   }catch(err){out.innerHTML='<div class="notice bad">没读到连接器：'+esc(err.message)+'</div>';}
 }
 
-/* ---------- 视图四：送礼管家（按关系分类的送礼对象档案） ---------- */
+/* ---------- 视图四：送礼管家（私有档案：选品/偏好/常用信息/上次送过什么） ---------- */
 const GIFT_RELATIONSHIPS = ["长辈", "晚辈", "同龄人", "朋友", "同事"];
 const GIFT_CATS = [["preference", "偏好"], ["size", "尺寸"], ["avoid", "忌讳"], ["last_gift", "上次送过什么"]];
 const GIFT_CAT_LABEL = {preference: "偏好", size: "尺寸", avoid: "忌讳", last_gift: "上次送过什么"};
@@ -591,7 +625,20 @@ async function renderGift(){
         + '</select><input type="text" data-entry-val="' + t.person_id + '" placeholder="内容，如 42 码 / 喜欢软底 / 忌讳送烟酒">'
         + '<button class="btn" data-add="' + t.person_id + '">加档案</button></div>'
         + '<div class="row"><button class="btn" data-detail="' + t.person_id + '">查看 / 管理档案条目</button></div>'
-        + '<div id="gift-detail-' + t.person_id + '"></div></section>';
+        + '<div id="gift-detail-' + t.person_id + '"></div>'
+        // 三段式信息：已经送过什么 / 快到节点的关键事件 / 商量过什么。
+        // 后两段现在没有数据支撑，就明说在建，不摆空壳假装有。
+        + '<div class="meta" style="margin-top:8px"><b>送礼记录</b>：'
+        + (lg ? esc(lg.value) + (lg.happened_on ? '（' + esc(lg.happened_on) + '）' : '')
+              + '；更早的记录在「查看 / 管理档案条目」里，按时间倒序。'
+            : '还没记。送过之后在这里留一条，下次就不会重复。') + '</div>'
+        + '<div class="meta" style="margin-top:4px"><b>关键事件</b>（生日、节日、庆典等）：'
+        + '<span class="pill">建设中</span> 现在还不会自己记住这些节点，'
+        + '也不会在临近时提醒。要记就写进上面的档案条目，例如「生日 6 月 1 日」。</div>'
+        + '<div class="meta" style="margin-top:4px"><b>讨论候选的概要</b>：'
+        + '<span class="pill">建设中</span> 你和对方商量过哪些候选、各自到什么程度，'
+        + '这里还不会汇总。协商过程在对应的事项里看。</div>'
+        + '</section>';
     }
     h += '</div>';
   }

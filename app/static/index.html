@@ -467,9 +467,9 @@ button:active:not(:disabled){transform:translateY(1px)}
   <h2 style="margin-top:24px">资料库</h2>
   <div class="sub" style="margin-bottom:8px">保存文字和图片，供后续安排时查用。</div>
   <button class="btn ghost" id="btn-photo">添加资料</button>
-  <input type="file" id="photo-input" accept="image/*"
-    capture="environment" style="display:none">
-  <input type="file" id="note-input" accept="image/*" style="display:none">
+  <!-- 旧拍照流的两个隐藏 file input（#photo-input / #note-input）已删除：
+       全文没有任何代码再点它们，只在 3818 行注释里作为退役说明被提到。
+       新录入走 #note-photo-input / #note-attach-input（见 notePickImage）。 -->
   <h2 style="margin-top:24px">小应用</h2>
   <div class="sub" style="margin-bottom:8px">两个轻量应用共用同一份记录：
     谁在学什么、周末怎么安排，都由它接着往下给建议。</div>
@@ -2619,6 +2619,7 @@ function renderNoteSheet(){
   renderNoteSubjects();
   renderNoteImageActs();
   renderNotePickChoice();
+  bindNoteVoice();
   noteSheetHint("");
 }
 
@@ -3325,8 +3326,16 @@ function noteVoice(btn){
     addKind: (k) => noteAddKind(k),
     label: "语音输入",
   });
-  // 首次绑定后立刻响应这次点击（pointerdown 已先于 click 触发过一次 start，
-  // 这里不重复启动，只保证键盘/辅助技术下也能用）。
+}
+
+/* 弹层一渲染出来就把按住说话的监听绑上。
+   早先是在 click 里才绑，而 pointerdown 先于 click 发生——用户第一下按下去
+   时监听还不存在，什么都没发生，正是「点了没反应」的原因。渲染时绑，
+   第一下按下就有效。键盘/辅助技术仍走 click 分支兜底。 */
+function bindNoteVoice(){
+  const btn = $("note-add-voice");
+  if(!btn || btn.cbPushToTalk) return;
+  noteVoice(btn);
 }
 
 
