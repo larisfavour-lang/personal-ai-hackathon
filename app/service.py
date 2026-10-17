@@ -13,6 +13,9 @@ import re
 import uuid
 import secrets
 import hashlib
+import ipaddress
+from urllib.parse import urlsplit
+import httpx
 from datetime import datetime, timedelta, timezone
 
 from . import agents, db as dbm
@@ -793,6 +796,8 @@ def correct_life_event(db, event_id, payload, owner_id):
              g["valid_until"], g["note"], dbm.now_iso()))
     db.audit("", owner_id, "life_event_corrected",
              {"old_event_id": event_id, "new_event_id": new_id_})
+    if row['source_kind'] == 'connector':
+        db.execute("UPDATE connector_record SET event_id=?,authorized_fields_json='[]' WHERE source_id=?", (new_id_, row['source_id']))
     invalidate_event_plans(db, event_id)
     return new_id_
 
@@ -950,6 +955,10 @@ def linked_events(db, task_id, viewer_id):
             payload = json.loads(ev["payload_json"] or "{}")
         except (ValueError, TypeError):
             payload = {}
+        if ev['source_kind'] == 'connector':
+            payload = _connector_model_fields(db, ev, payload)
+            if not payload:
+                continue
         out.append({
             "link_id": r["link_id"],
             "event_id": ev["event_id"],
@@ -1238,8 +1247,32 @@ def notice_life_event(db, event_id, viewer_id):
 # 用户原话「我出 100 以内」是前者；把它写成后者，等于替其他家庭
 # 把整场活动的预算定成了 100，正是用户明确防的坑。
 # 界面、模型、库里都按这两个键读写，不接受把两者混成一个「预算」。
-PLAN_CONDITION_KEYS = ("时间", "地点", "活动总预算", "本人出资上限",
-                       "活动内容", "孩子安排", "交通", "备注")
+# 事项条件字段按场景配置：家庭活动与朋友旅行各一组键，互不串味。
+# 家庭场景保留原有 8 个键（一个都不能少、不能改名），行为零变化；
+# 朋友旅行用新字段集，能表达「每个人想去的不一样」。校验、未知键拒绝、
+# 出资口径、来源投影与授权对两个场景都成立，不只对新场景生效。
+PLAN_SCENARIOS = {
+    "group_activity": {
+        "label": "家庭活动",
+        "condition_keys": ("时间", "地点", "活动总预算", "本人出资上限",
+                           "活动内容", "孩子安排", "交通", "备注"),
+        "own_cap_key": "本人出资上限",
+        "total_budget_key": "活动总预算",
+        "percap_key": None,
+        "family_flavored": True,
+    },
+    "friend_trip": {
+        "label": "朋友旅行",
+        "condition_keys": ("时间", "目的地", "假期长度", "人均预算", "本人预算上限",
+                           "住宿标准", "交通", "能否带伴侣", "忌口或体力", "备注"),
+        "own_cap_key": "本人预算上限",
+        "total_budget_key": None,
+        "percap_key": "人均预算",
+        "family_flavored": False,
+    },
+}
+# 家庭场景的键与口径说明单独留名：既有界面/模型/测试照旧引用，行为不变。
+PLAN_CONDITION_KEYS = PLAN_SCENARIOS["group_activity"]["condition_keys"]
 
 # 出资口径的说明，给界面和模型用同一句，避免两边说法不一致。
 OWN_CAP_HINT = "「本人出资上限」只是这一家自己最多出多少，不是活动总预算"
@@ -1253,6 +1286,28 @@ OWN_CAP_HINT = "「本人出资上限」只是这一家自己最多出多少，�
 LEGACY_BUDGET_KEY = "预算"
 PER_FAMILY_MARKERS = ("每家", "每户", "各自", "每方", "一方", "本家", "我家")
 TOTAL_MARKERS = ("总共", "一共", "合计", "总预算", "整体", "全场", "总费用")
+# 人均口径：朋友旅行里「人均/每人」说的是每个人的份额，不是整场总预算，
+# 也不是某一方的上限。三者分开，不能混成一个「预算」。
+PER_CAP_MARKERS = ("人均", "每人", "每个人", "每一位", "每位")
+
+
+def condition_keys(scenario):
+    """这个场景允许的条件字段。未知场景退回家庭活动的键，不抛错。"""
+    cfg = PLAN_SCENARIOS.get(scenario) or PLAN_SCENARIOS["group_activity"]
+    return cfg["condition_keys"]
+
+
+def own_cap_hint(scenario):
+    """这个场景的「本人上限 ≠ 总预算/人均」口径说明，界面和模型共用一句。"""
+    cfg = PLAN_SCENARIOS.get(scenario) or PLAN_SCENARIOS["group_activity"]
+    if cfg.get("family_flavored", True):
+        return OWN_CAP_HINT
+    return "「本人预算上限」只是你自己最多出多少，不是人均预算，也不是替所有人定的价"
+
+
+def scenario_label(scenario):
+    cfg = PLAN_SCENARIOS.get(scenario) or PLAN_SCENARIOS["group_activity"]
+    return cfg["label"]
 
 
 def budget_calibre(value):
@@ -1271,12 +1326,16 @@ def budget_calibre(value):
     return "unknown"
 
 
-def normalize_conditions(conditions):
-    """把条件归一到带口径的键上。
+def normalize_conditions(conditions, scenario="group_activity"):
+    """把条件归一到带口径的键上。按场景取字段集。
 
     返回 (归一后的条件, 不认识的键列表, 要本人确认的键列表)。
     第三个列表非空时，调用方必须停下来问本人，不能挑一个口径默认。
+    家庭场景（默认）行为与之前完全一致；朋友旅行按 friend_trip 字段集，
+    「预算」旧键按 人均/本人上限 口径归一，判不出就请本人确认。
     """
+    cfg = PLAN_SCENARIOS.get(scenario) or PLAN_SCENARIOS["group_activity"]
+    keys = cfg["condition_keys"]
     out = {}
     unknown = []
     confirm = []
@@ -1284,17 +1343,31 @@ def normalize_conditions(conditions):
         key = str(k)
         val = str(v)
         if key == LEGACY_BUDGET_KEY:
-            cal = budget_calibre(val)
-            if cal == "own":
-                key = "本人出资上限"
-            elif cal == "total":
-                key = "活动总预算"
+            if cfg.get("family_flavored", True):
+                cal = budget_calibre(val)
+                if cal == "own":
+                    key = cfg["own_cap_key"]
+                elif cal == "total":
+                    key = cfg["total_budget_key"]
+                else:
+                    # 口径不明：两个键都不写，交给本人确认。默认成任何一个，
+                    # 都是替他把话说清楚，而这句话本来是他自己的条件。
+                    confirm.append(LEGACY_BUDGET_KEY)
+                    continue
             else:
-                # 口径不明：两个键都不写，交给本人确认。默认成任何一个，
-                # 都是替他把话说清楚，而这句话本来是他自己的条件。
-                confirm.append(LEGACY_BUDGET_KEY)
-                continue
-        if key not in PLAN_CONDITION_KEYS:
+                # 朋友旅行：人均/每人是每个人的份额；我出/我家/各自等是本人上限；
+                # 判不出（光一个数、或多种口径同时出现）就请本人确认。
+                per_cap = any(m in val for m in PER_CAP_MARKERS)
+                own = any(m in val for m in ("我出", "我最多", "我个人", "自己出", "我这",
+                                             "本家", "我家", "各自", "我方"))
+                if per_cap and not own:
+                    key = cfg["percap_key"]
+                elif own and not per_cap:
+                    key = cfg["own_cap_key"]
+                else:
+                    confirm.append(LEGACY_BUDGET_KEY)
+                    continue
+        if key not in keys:
             unknown.append(str(k))
             continue
         # 同一个键给两个口径时，后写的那个不覆盖前一个，两个都留下让本人看。
@@ -1859,12 +1932,15 @@ def continue_group_activity(db, owner_id, text):
 
 
 def _group_activity_reply(text, cap, families, missing):
+    # 说明写短。事实一条不少：出资上限只是本人这一方、别家自己说；
+    # 已知家庭有哪些；说的几家只认出几家、缺的留着待确认；
+    # 各家条件各家自己补。不堆「不会…也不会…」那种多重否定。
     lines = ["好，这件事按家庭活动记下来了，不开礼物、也不用点一个孩子。"]
     if cap:
-        lines.append("你说的「%s」记在**本人出资上限**里——只是你家最多出多少，"
-                     "不是活动总预算，别家出多少由别家自己说。" % cap)
+        lines.append("「%s」记在**本人出资上限**里，只是你家最多出多少；"
+                     "别家出多少由别家自己说。" % cap)
     else:
-        lines.append("还没说你这一方出多少；那是你自己的条件，别人替不了你。")
+        lines.append("还没说你这一方出多少。那是你自己的条件，别人替不了你。")
     if families:
         parts = []
         for f in families:
@@ -1873,12 +1949,11 @@ def _group_activity_reply(text, cap, families, missing):
                                           "、".join(c["name"] for c in f["children"])))
             else:
                 parts.append("%s（有几个孩子还没记录）" % f["label"])
-        lines.append("按你已经记下的关系，这边知道的家庭有：" + "；".join(parts) + "。")
+        lines.append("按你已经记下的关系，这边知道：" + "；".join(parts) + "。")
     if missing:
-        lines.append("你说了 %d 家，目前只认得出 %d 家。剩下的%d家我这边没有记录，"
-                     "先留着待确认——不会拿认识的人凑数，也不会替他们答应任何事。"
+        lines.append("你说了 %d 家，只认得出 %d 家。剩下 %d 家没有记录，先留着待确认。"
                      % (len(families) + missing, len(families), missing))
-    lines.append("各家的条件由各家从自己的入口补；都齐了我会排一版方案给大家确认。")
+    lines.append("各家的条件由各家从自己的入口补；都齐了我排一版方案给大家确认。")
     return "\n".join(lines)
 
 
@@ -1976,8 +2051,10 @@ def decide_plan(db, plan_id, participant_id, version, decision, reason="", chang
         raise ValueError("有家庭刚更新了条件，方案要重排后才能表态")
     if guest and guest["role"] == "guest" and decided_by != "person" and db.row("SELECT 1 FROM plan_decision WHERE plan_id=? AND participant_id=? AND version=? AND decided_by='person' AND decision<>'stale'", (plan_id, participant_id, version)):
         raise ValueError("本事项本人已明确表态，代表建议不能覆盖本人决定")
-    # 同一参与方对同一版本只保留最后一次表态。
-    db.execute("DELETE FROM plan_decision WHERE plan_id=? AND participant_id=? AND version=?",
+    # 同一参与方对同一版本只保留最后一次本人／代表表态。
+    # 代决策行另存：一个随行者一条，不在这条删除里，否则代决策会被自己人清掉。
+    db.execute("DELETE FROM plan_decision WHERE plan_id=? AND participant_id=? AND version=?"
+               " AND decided_by IN ('person','representative')",
                (plan_id, participant_id, version))
     did = dbm.new_id("pdec")
     # 任何一方表态都可能改变是否已约定：接受满各方就成，拒绝就退回。
@@ -1988,12 +2065,44 @@ def decide_plan(db, plan_id, participant_id, version, decision, reason="", chang
         " VALUES(?,?,?,?,?,?,?,?,?)",
         (did, plan_id, participant_id, version, decision, reason,
          json.dumps(changes or {}, ensure_ascii=False),
-         decided_by if decided_by in ("person", "representative") else "person",
+         decided_by if decided_by in ("person", "representative", "delegate") else "person",
          dbm.now_iso()))
     db.audit(plan_id, actor_id, "plan_decision",
              {"participant_id": participant_id, "version": version, "decision": decision})
+    if decision == "accept":
+        _record_delegated_decisions(db, plan_id, participant_id, version, decision)
     refresh_plan_stage(db, plan_id)
     return did
+
+
+def _record_delegated_decisions(db, plan_id, participant_id, version, decision):
+    """为「没有配置自己助手」的随行者补代决策记录。
+
+    代决策是单独一类：它说明这一票是声明人代随行者做的，不是随行者本人同意。
+    已约定判据只数本人接受，代决策行永远不计入。
+    """
+    row = db.row("SELECT companions_json FROM plan_participant WHERE participant_id=?",
+                 (participant_id,))
+    if not row:
+        return
+    try:
+        comps = (json.loads(row["companions_json"] or "{}") or {}).get("companions") or []
+    except Exception:
+        return
+    for c in comps:
+        if c.get("has_agent") or c.get("decision_mode") != "delegated":
+            continue
+        db.execute("DELETE FROM plan_decision WHERE plan_id=? AND participant_id=? AND version=?"
+                   " AND decided_by='delegate' AND json_extract(changes_json,'$.companion')=?",
+                   (plan_id, participant_id, version, c["name"]))
+        db.execute(
+            "INSERT INTO plan_decision(plan_decision_id, plan_id, participant_id, version,"
+            " decision, reason, changes_json, decided_by, created_at)"
+            " VALUES(?,?,?,?,?,?,?,?,?)",
+            (dbm.new_id("pdec"), plan_id, participant_id, version, decision,
+             "代%s决策（其未配置自己的助手）" % c["name"],
+             json.dumps({"companion": c["name"]}, ensure_ascii=False),
+             "delegate", dbm.now_iso()))
 
 
 def plan_status(db, plan_id):
@@ -2020,9 +2129,12 @@ def plan_status(db, plan_id):
     required_total = 0
     required_agreed = 0
     for p in participants:
+        # 本方状态只认本人／代表表态：代决策行是代随行者投的，
+        # 混进来会把「有人代投了」显示成「这一方本人同意了」。
         dec = db.row(
             "SELECT * FROM plan_decision WHERE plan_id=? AND participant_id=?"
-            " AND version=? ORDER BY created_at DESC LIMIT 1",
+            " AND version=? AND decided_by IN ('person','representative')"
+            " ORDER BY created_at DESC LIMIT 1",
             (plan_id, p["participant_id"], version))
         state = dec["decision"] if dec else "pending"
         if p.get("role") == "guest":
@@ -2040,6 +2152,12 @@ def plan_status(db, plan_id):
             "participant_id": p["participant_id"], "owner_id": p["owner_id"],
             "label": p["label"], "role": p.get("role", "family"),
             "conditions": json.loads(p["conditions_json"] or "{}"),
+            # 朋友旅行：这一方声明的人数与出席，以及自己决定要不要说出来的随行。
+            # 家庭场景这两个字段都是空对象，行为不变。
+            "headcount": json.loads(p.get("headcount_json") or "{}"),
+            "companions": (json.loads(p.get("companions_json") or "{}") or {}).get("companions") or [],
+            "delegated": [c["name"] for c in (json.loads(p.get("companions_json") or "{}") or {}).get("companions") or []
+                          if c.get("decision_mode") == "delegated"],
             "required": bool(p["required"]),
             "state": state,
             "reason": (dec or {}).get("reason", ""),
@@ -2113,11 +2231,11 @@ def update_plan_condition(db, plan_id, actor_id, conditions, reason=""):
         raise ValueError("这个身份在这个事项里代表多方，请指明是哪一方")
     side = rows[0]
     # 条件必须是结构化字段：模型和界面都按同一组键读写，不接受任意键。
-    # 「预算」这个旧键在这里归一成「活动总预算」：一家的出资上限和整场活动
-    # 的总预算不是一个数，混在一个键里，方案排出来说不清每个数是谁的。
-    cleaned, unknown, confirm = normalize_conditions(conditions)
+    # 按事项场景取字段集：家庭活动用原 8 键，朋友旅行用旅行字段集。
+    _plan_kind = (db.row("SELECT kind FROM plan WHERE plan_id=?", (plan_id,)) or {}).get("kind", "group_activity")
+    cleaned, unknown, confirm = normalize_conditions(conditions, scenario=_plan_kind)
     if unknown:
-        raise ValueError("条件只能包含这些字段：%s" % "、".join(PLAN_CONDITION_KEYS))
+        raise ValueError("条件只能包含这些字段：%s" % "、".join(condition_keys(_plan_kind)))
     if confirm:
         # 口径不明就停下来问，不默认成任何一个：一家的上限和整场的总预算
         # 不是一个数，猜错就是替他把条件定了。
@@ -4004,6 +4122,11 @@ def _life_events_both_sides(db, owner_id, person_id):
     seen = {}
     for pid in ids:
         for e in life_events_for(db, pid, owner_id):
+            if e['source_kind'] == 'connector':
+                ev = db.row('SELECT * FROM life_event WHERE event_id=?', (e['event_id'],))
+                e['fields'] = _connector_model_fields(db, ev, e['fields'])
+                if not e['fields']:
+                    continue
             seen[e["event_id"]] = e
     # 每条记录带上它的配图清单（不含 base64）。界面按 event_id 单独取图，
     # 服务端在那里校验身份。不在列表里直接塞图片数据，否则刷一次人物详情
@@ -4234,9 +4357,7 @@ def recover_group_activity(db, owner_id, task_id):
                 "这件事按家庭活动重新记下；原话保留，未删除。",
                 started["plan_id"], task_id))
     save_turn(db, owner_id, "system",
-              "已经把「%s」从送礼改成了家庭活动，新的事情项是 %s。"
-              "原来的记录还在，没有删。"
-              % (task["utterance"][:60], started["title"][:60]),
+              "已经按家庭活动重开了，原来的记录还在，没有删。",
               task_id=task_id, plan_id=started["plan_id"])
     return {"task_id": task_id, "plan_id": started["plan_id"],
             "reused": started["reused"], "reply": started["reply"]}
@@ -5721,9 +5842,11 @@ def participation_plan(db, session):
     att = json.loads(side['attendance_json'])
     # No utterance, contacts, raw meta, owner source references or attachments.
     out = {k: st[k] for k in ('plan_id','title','proposal','proposal_reason','current_version','participants','waiting_on','agreed','needs_replan','confirmation_gaps')}
+    out['kind'] = db.row('SELECT kind FROM plan WHERE plan_id=?', (session['plan_id'],))['kind']
     out['versions'] = [{'version': r['version'], 'content': json.loads(r['content_json']), 'reason': r['reason']} for r in db.rows('SELECT * FROM plan_proposal WHERE plan_id=? ORDER BY version', (session['plan_id'],))]
     out['decisions'] = db.rows('SELECT participant_id,version,decision,reason,decided_by FROM plan_decision WHERE plan_id=?', (session['plan_id'],))
-    out.update(me={**mine, 'children': att.get('guest_children', []), 'children_count': att.get('children_count')}, approved=bool(session['approved']), csrf_token=session['csrf_token'], identity_note=PARTICIPATION_NOTE)
+    comp = (json.loads(db.row('SELECT companions_json FROM plan_participant WHERE participant_id=?', (mine['participant_id'],))['companions_json'] or '{}') or {}).get('companions') or []
+    out.update(me={**mine, 'children': att.get('guest_children', []), 'children_count': att.get('children_count'), 'companions': comp}, approved=bool(session['approved']), csrf_token=session['csrf_token'], identity_note=PARTICIPATION_NOTE)
     return out
 
 
@@ -5766,6 +5889,11 @@ def link_event_to_plan(db, actor, event_id, plan_id, selected_fields, public_con
             raise ValueError('受邀事项会话无个人资料库权限')
         data = note_fields(db, actor, event_id)
         fields = data['fields']
+        source_event = db.row('SELECT * FROM life_event WHERE event_id=?', (event_id,))
+        if source_event['source_kind'] == 'connector' and selected_fields:
+            approved = _connector_model_fields(db, source_event, fields)
+            if any(k not in approved for k in selected_fields):
+                raise ValueError('连接器字段尚未单独授权用于建议；请在数据接入页逐项授权')
         if not isinstance(selected_fields, list) or len(selected_fields)>20 or any(not isinstance(k,str) or k not in fields for k in selected_fields) or len(set(selected_fields)) != len(selected_fields):
             raise ValueError('只能选择记录中已有的具体字段')
         public_conditions = public_conditions or {}
@@ -5909,3 +6037,716 @@ revoke_life_event = _atomic_lifecycle(revoke_life_event)
 correct_life_event = _atomic_lifecycle(correct_life_event)
 update_plan_condition = _atomic_lifecycle(update_plan_condition)
 decide_plan = _atomic_lifecycle(decide_plan)
+
+
+# Connectors import privately; model use requires explicit per-record field consent.
+CONNECTOR_FIELDS = ('进度', '已完成项目', '发生日期', '对象')
+CONNECTOR_MAX_BYTES = 512 * 1024
+CONNECTOR_CATALOG = {
+    'school': {'name': '学校通知', 'description': '带来通知事项与日期；不带来成绩或孩子评价。', 'item': '周六图书角整理通知'},
+    'course': {'name': '课程表', 'description': '带来课程项目与日期；不带来实际出席或学习效果。', 'item': '周六美术课'},
+    'todo': {'name': '待办清单', 'description': '带来待办与进度；不代表已执行或他人承诺。', 'item': '整理绘本：完成一半'},
+    'wishlist': {'name': '购物愿望单', 'description': '带来愿望项目与日期；不带来库存、价格或购买授权。', 'item': '希望借阅拼图绘本'},
+}
+
+
+def _connector(db, owner, cid, active=True):
+    row = db.row('SELECT * FROM app_connector WHERE connector_id=? AND owner_id=?', (cid, owner))
+    if not row or (active and row['revoked']):
+        raise ValueError('连接器不存在、不是本人的或已撤回')
+    return row
+
+
+def _connector_url(base_url, path):
+    base, tail = urlsplit(base_url), urlsplit(path)
+    if base.scheme not in ('http', 'https') or not base.hostname:
+        raise ValueError('接口地址只允许 http 或 https')
+    if base.username or base.password or base.query or base.fragment or tail.scheme or tail.netloc or tail.query or tail.fragment or not path.startswith('/'):
+        raise ValueError('地址不能含凭证、查询或片段；路径须以 / 开头且不能切换主机')
+    try:
+        host = ipaddress.ip_address(base.hostname)
+    except ValueError:
+        host = None
+    if host and not host.is_global and not host.is_loopback:
+        raise ValueError('不能访问内网、链路本地或云元数据地址；本地演示仅允许回环地址')
+    return base_url.rstrip('/') + path
+
+
+def connector_create(db, owner, kind, name, base_url='', path='', field_map=None, auth_token=''):
+    if kind not in ('self_app', 'third_party') or not isinstance(name, str) or not 0 < len(name.strip()) <= 60:
+        raise ValueError('请选择连接器类型并填写 1–60 字名称')
+    if auth_token:
+        raise ValueError('本演示不接收或保存凭证；请提供无需凭证的演示接口')
+    if kind == 'self_app':
+        _connector_url(base_url, path)
+        if not isinstance(field_map, dict) or not field_map or len(field_map) > 4 or any(not isinstance(k, str) or not 0 < len(k) <= 80 or not isinstance(v, str) or v not in CONNECTOR_FIELDS for k, v in field_map.items()) or len(set(field_map.values())) != len(field_map):
+            raise ValueError('请提供不重复的外部字段 → 进度、已完成项目、发生日期、对象映射')
+    else:
+        if path not in CONNECTOR_CATALOG:
+            raise ValueError('请选择内置模拟连接器')
+        base_url, field_map = '', {'progress': '进度', 'completed': '已完成项目', 'date': '发生日期', 'subject': '对象'}
+    cid = dbm.new_id('connector')
+    db.execute('INSERT INTO app_connector(connector_id,owner_id,kind,name,base_url,path,field_map_json,created_at) VALUES(?,?,?,?,?,?,?,?)',
+               (cid, owner, kind, name.strip(), base_url, path, json.dumps(field_map, ensure_ascii=False), dbm.now_iso()))
+    return cid
+
+
+def connector_demo_items(db, owner):
+    subject = db.row("SELECT person_id FROM person WHERE owner_id=? ORDER BY CASE WHEN name='我' THEN 0 ELSE 1 END,person_id LIMIT 1", (owner,))
+    return [{'id': 'progress-demo-1', 'progress': '读完两本绘本', 'completed': '数学练习 20 题', 'date': '2026-10-17', 'subject': '我' if subject else ''}]
+
+
+def _connector_fetch(db, row):
+    if row['kind'] == 'third_party':
+        item = connector_demo_items(db, row['owner_id'])[0]
+        item.update(id=row['path']+'-demo-1', progress=CONNECTOR_CATALOG[row['path']]['item'], completed='示例项目（模拟）')
+        return [item]
+    url = _connector_url(row['base_url'], row['path'])
+    try:
+        # Resolve once and reject non-public network targets; loopback is explicit local-demo allowance.
+        import socket
+        for info in socket.getaddrinfo(urlsplit(url).hostname, urlsplit(url).port or (443 if url.startswith('https:') else 80), type=socket.SOCK_STREAM):
+            address = ipaddress.ip_address(info[4][0])
+            if not address.is_global and not address.is_loopback:
+                raise ValueError('域名指向内网或链路本地地址，不能接入')
+        with httpx.Client(timeout=httpx.Timeout(5.0), follow_redirects=False, trust_env=False) as client:
+            import time
+            deadline = time.monotonic() + 10
+            with client.stream('GET', url, headers={'Accept': 'application/json'}) as response:
+                if response.status_code != 200:
+                    raise ValueError('接口返回 HTTP %d（不跟随重定向）' % response.status_code)
+                media = response.headers.get('content-type', '').split(';')[0].strip().lower()
+                if media != 'application/json' and not media.endswith('+json'):
+                    raise ValueError('接口必须返回 JSON Content-Type')
+                chunks, length = [], 0
+                for chunk in response.iter_bytes():
+                    length += len(chunk)
+                    if length > CONNECTOR_MAX_BYTES:
+                        raise ValueError('接口响应超过 512 KiB 上限')
+                    if time.monotonic() > deadline:
+                        raise ValueError('接口响应总读取超过 10 秒')
+                    chunks.append(chunk)
+                data = json.loads(b''.join(chunks))
+    except httpx.TimeoutException as exc:
+        raise ValueError('接口请求超时（每段等待最多 5 秒）') from exc
+    except (httpx.RequestError, OSError) as exc:
+        raise ValueError('接口连接失败：%s；请检查服务是否启动及地址' % type(exc).__name__) from exc
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise ValueError('接口响应不是可解析的 JSON') from exc
+    if isinstance(data, dict):
+        data = data.get('items')
+    if not isinstance(data, list) or len(data) > 100 or any(not isinstance(x, dict) for x in data):
+        raise ValueError('JSON 须为最多 100 条对象数组，或包含 items 数组')
+    return data
+
+
+def _connector_preview(db, row):
+    data = _connector_fetch(db, row)
+    mapping, items, identities = json.loads(row['field_map_json']), [], set()
+    for index, raw in enumerate(data):
+        fields, warnings = {}, []
+        for external, local in mapping.items():
+            value = raw.get(external)
+            if value is None or value == '':
+                warnings.append('缺少外部字段「%s」，无法映射到「%s」' % (external, local))
+            elif not isinstance(value, (str, int, float)) or isinstance(value, bool) or len(str(value)) > 2000:
+                warnings.append('外部字段「%s」不是可用的短文本或数字' % external)
+            else:
+                fields[local] = str(value)
+        external_id = raw.get('id')
+        if not isinstance(external_id, (str, int)) or isinstance(external_id, bool) or not 0 < len(str(external_id)) <= 200:
+            warnings.append('缺少稳定的外部 id，不能确认接入')
+        elif str(external_id) in identities:
+            warnings.append('外部 id 重复，不能确认接入')
+        else:
+            identities.add(str(external_id))
+        subject = db.row('SELECT person_id FROM person WHERE owner_id=? AND person_id=?', (row['owner_id'], fields.get('对象', '')))
+        if not subject:
+            named = db.rows('SELECT person_id FROM person WHERE owner_id=? AND name=?', (row['owner_id'], fields.get('对象', '')))
+            subject = named[0] if len(named) == 1 else None
+        if not subject:
+            warnings.append('对象未匹配到本人已有记录；不按相似姓名猜测')
+        try:
+            datetime.strptime(fields.get('发生日期', ''), '%Y-%m-%d')
+        except ValueError:
+            warnings.append('发生日期须为有效 YYYY-MM-DD；不会补今天')
+        if not any(k in fields for k in ('进度', '已完成项目')):
+            warnings.append('没有映射到进度或已完成项目')
+        items.append({'index': index+1, 'raw_keys': sorted(str(k) for k in raw), 'mapped': fields, 'warnings': warnings,
+                      'external_id': str(external_id) if external_id is not None else '', 'subject_id': subject['person_id'] if subject else '', 'importable': not warnings})
+    return {'simulated': row['kind']=='third_party', 'network_request': row['kind']=='self_app', 'total': len(items), 'preview': items[:5], '_items': items}
+
+
+def connector_test(db, owner, cid):
+    row = _connector(db, owner, cid)
+    try:
+        preview = _connector_preview(db, row)
+    except ValueError as exc:
+        db.execute("UPDATE app_connector SET status='failed',last_error=? WHERE connector_id=?", (str(exc), cid))
+        raise
+    preview.pop('_items')
+    return preview
+
+
+def connector_sync(db, owner, cid):
+    row = _connector(db, owner, cid)
+    try:
+        preview = _connector_preview(db, row)
+        items = preview.pop('_items')
+        if any(not x['importable'] for x in items):
+            raise ValueError('映射未完成，未导入：'+'；'.join(next(x['warnings'] for x in items if x['warnings'])))
+        created = 0
+        with db.atomic():
+            _connector(db, owner, cid)
+            for item in items:
+                existing = db.row('SELECT * FROM connector_record WHERE connector_id=? AND external_id=?', (cid, item['external_id']))
+                if existing:
+                    continue  # Never silently overwrite corrected/revoked history.
+                sid = cid+':'+hashlib.sha256(item['external_id'].encode()).hexdigest()[:24]
+                payload = {k: v for k, v in item['mapped'].items() if k not in ('对象', '发生日期')}
+                eid, made = import_life_event(db, sid, item['subject_id'], 'connector_record', payload, item['mapped']['发生日期'], row['name']+('（模拟数据）' if preview['simulated'] else '（接口数据）'), owner, source_kind='connector')
+                db.execute('INSERT INTO connector_record(connector_id,external_id,source_id,event_id) VALUES(?,?,?,?)', (cid, item['external_id'], sid, eid))
+                created += int(made)
+            db.execute("UPDATE app_connector SET status='connected',last_sync_at=?,last_error='' WHERE connector_id=?", (dbm.now_iso(), cid))
+        return {**preview, 'created': created}
+    except ValueError as exc:
+        db.execute("UPDATE app_connector SET status='failed',last_error=? WHERE connector_id=?", (str(exc), cid))
+        raise
+
+
+def connector_list(db, owner):
+    out = []
+    for row in db.rows('SELECT * FROM app_connector WHERE owner_id=? ORDER BY created_at DESC', (owner,)):
+        events = []
+        for record in db.rows('SELECT * FROM connector_record WHERE connector_id=?', (row['connector_id'],)):
+            ev = db.row('SELECT * FROM life_event WHERE event_id=?', (record['event_id'],))
+            if ev:
+                events.append({'event_id': ev['event_id'], 'status': ev['status'], 'source_id': ev['source_id'], 'provider': ev['provider'], 'happened_on': ev['happened_on'], 'fields': json.loads(ev['payload_json']), 'authorized_fields': json.loads(record['authorized_fields_json'])})
+        out.append({k: row[k] for k in ('connector_id','kind','name','base_url','path','auth_ref','status','last_sync_at','last_error','created_at','revoked')})
+        out[-1].update(field_map=json.loads(row['field_map_json']), simulated=row['kind']=='third_party', imported_count=len(events), events=events)
+    return out
+
+
+def connector_authorize(db, owner, cid, event_id, fields):
+    with db.atomic():
+        _connector(db, owner, cid)
+        ev = db.row("SELECT * FROM life_event WHERE event_id=? AND owner_id=? AND status='active'", (event_id, owner))
+        record = db.row('SELECT * FROM connector_record WHERE connector_id=? AND event_id=?', (cid, event_id))
+        if not ev or not record or not isinstance(fields, list) or any(not isinstance(k,str) or k not in json.loads(ev['payload_json']) for k in fields) or len(fields)!=len(set(fields)):
+            raise ValueError('只能授权本人当前记录中逐项选择的字段')
+        db.execute('UPDATE connector_record SET authorized_fields_json=? WHERE connector_id=? AND event_id=?', (json.dumps(fields, ensure_ascii=False), cid, event_id))
+        # Removing even one published field invalidates prior plan dependencies.
+        if not set(json.loads(record['authorized_fields_json'])).issubset(fields):
+            invalidate_event_plans(db, event_id)
+    return {'authorized_fields': fields}
+
+
+def connector_revoke(db, owner, cid):
+    with db.atomic():
+        _connector(db, owner, cid, active=False)
+        for r in db.rows("SELECT e.* FROM connector_record c JOIN life_event e ON e.source_id=c.source_id WHERE c.connector_id=? AND e.status='active'", (cid,)):
+            revoke_life_event(db, r['event_id'], owner)
+        db.execute("UPDATE connector_record SET authorized_fields_json='[]' WHERE connector_id=?", (cid,))
+        db.execute("UPDATE app_connector SET revoked=1,status='disconnected' WHERE connector_id=?", (cid,))
+    return {'revoked': True, 'history_preserved': True}
+
+
+def _connector_model_fields(db, ev, fields):
+    if ev['source_kind'] != 'connector':
+        return fields
+    row = db.row('SELECT r.authorized_fields_json,c.revoked FROM connector_record r JOIN app_connector c ON c.connector_id=r.connector_id WHERE r.source_id=? AND r.event_id=?', (ev['source_id'], ev['event_id']))
+    allowed = json.loads(row['authorized_fields_json']) if row and not row['revoked'] and ev['status']=='active' else []
+    return {k: v for k, v in fields.items() if k in allowed}
+
+
+# ======================== 送礼对象档案（t49） ========================
+# 复用 life_event 与 person，不建平行表。键名契约见
+# docs/evidence/gift-target-profile-20261017.md：
+#   person.attributes_json = {"gift_target": {"relationship": <五类之一>, "marked_at", "note"}}
+#   gift_target 键存在即把该 person 标记为送礼对象；relationship 是唯一关系来源。
+#   与 t53 的「通用人际关系分类」是两层：本层命名空间隔离在 gift_target 下，
+#   不预设、不占用通用位、不与其混成一个字段。
+# 档案条目 = life_event(event_type='gift_profile', payload={category, value})：
+#   更正走 correct_life_event(supersede，旧值仅作来源可查)、撤回走 revoke_life_event
+#   (tombstone)、授权走 event_grant、来源/日期/提供者齐备、provenance 走 audit。
+GIFT_RELATIONSHIP_CATEGORIES = ("长辈", "晚辈", "同龄人", "朋友", "同事")
+GIFT_PROFILE_CATEGORIES = ("preference", "size", "avoid", "last_gift")
+GIFT_CATEGORY_LABELS = {"preference": "偏好", "size": "尺寸",
+                        "avoid": "忌讳", "last_gift": "上次送过什么"}
+GIFT_PROFILE_EVENT_TYPE = "gift_profile"
+_GIFT_SOURCE_PREFIX = "gift_profile"
+
+
+def _gift_attrs(db, person_id):
+    row = db.row("SELECT attributes_json FROM person WHERE person_id=?", (person_id,))
+    if row is None:
+        return {}
+    try:
+        attrs = json.loads(row["attributes_json"] or "{}")
+    except (ValueError, TypeError):
+        attrs = {}
+    return attrs if isinstance(attrs, dict) else {}
+
+
+def _write_gift_attrs(db, person_id, gift_block):
+    attrs = _gift_attrs(db, person_id)
+    attrs["gift_target"] = gift_block
+    db.execute("UPDATE person SET attributes_json=? WHERE person_id=?",
+               (json.dumps(attrs, ensure_ascii=False), person_id))
+
+
+def is_gift_target(db, person_id):
+    return isinstance(_gift_attrs(db, person_id).get("gift_target"), dict)
+
+
+def create_gift_target(db, owner_id, name="", relationship="", person_id="", note=""):
+    """把一个人标记为送礼对象并设定关系分类。可关联已有 person，也可新建。"""
+    if relationship and relationship not in GIFT_RELATIONSHIP_CATEGORIES:
+        raise ValueError("关系分类须为：%s" % "/".join(GIFT_RELATIONSHIP_CATEGORIES))
+    if person_id:
+        person = db.row("SELECT * FROM person WHERE person_id=? AND owner_id=?",
+                        (person_id, owner_id))
+        if person is None:
+            raise ValueError("这个人物不在你的记录里")
+        pid = person_id
+        created = False
+    else:
+        name = (name or "").strip()
+        if not name:
+            raise ValueError("新建送礼对象需要姓名")
+        if _person_by_name(db, owner_id, name) is not None:
+            raise ValueError("已存在同名人物，请关联这个人物而不是重复新建")
+        pid = dbm.new_id("p")
+        db.execute("INSERT INTO person(person_id,owner_id,name,relation,note) VALUES(?,?,?,?,?)",
+                   (pid, owner_id, name, "other", note or "送礼对象"))
+        created = True
+    _write_gift_attrs(db, pid, {"relationship": relationship or "",
+                                "marked_at": dbm.now_iso()[:10], "note": note or ""})
+    row = db.row("SELECT name FROM person WHERE person_id=?", (pid,)) or {}
+    db.audit("", owner_id, "gift_target_created",
+             {"person_id": pid, "relationship": relationship, "created": created}, owner_id=owner_id)
+    return {"person_id": pid, "name": row.get("name", ""),
+            "relationship": relationship, "created": created}
+
+
+def set_gift_relationship(db, owner_id, person_id, relationship):
+    if relationship not in GIFT_RELATIONSHIP_CATEGORIES:
+        raise ValueError("关系分类须为：%s" % "/".join(GIFT_RELATIONSHIP_CATEGORIES))
+    person = db.row("SELECT * FROM person WHERE person_id=? AND owner_id=?", (person_id, owner_id))
+    if person is None:
+        raise ValueError("这个人物不在你的记录里")
+    block = _gift_attrs(db, person_id).get("gift_target")
+    if not isinstance(block, dict):
+        block = {"marked_at": dbm.now_iso()[:10], "note": ""}
+    block["relationship"] = relationship
+    _write_gift_attrs(db, person_id, block)
+    db.audit("", owner_id, "gift_target_relationship",
+             {"person_id": person_id, "relationship": relationship}, owner_id=owner_id)
+    return block
+
+
+def _gift_source_id(person_id, category, value):
+    digest = hashlib.sha256((value or "").encode("utf-8")).hexdigest()[:16]
+    return "%s:%s:%s:%s" % (_GIFT_SOURCE_PREFIX, person_id, category, digest)
+
+
+def _gift_entry_view(db, event_id):
+    row = db.row("SELECT * FROM life_event WHERE event_id=?", (event_id,))
+    if row is None:
+        return None
+    try:
+        payload = json.loads(row["payload_json"] or "{}")
+    except (ValueError, TypeError):
+        payload = {}
+    return {"event_id": row["event_id"], "category": payload.get("category", ""),
+            "value": payload.get("value", ""), "provider": row["provider"],
+            "happened_on": row["happened_on"], "source": row["source_id"],
+            "status": row["status"], "superseded_by": row["superseded_by"] or ""}
+
+
+def _active_gift_entry(db, owner_id, person_id, category, value):
+    for r in db.rows(
+            "SELECT event_id FROM life_event WHERE owner_id=? AND subject_id=?"
+            " AND event_type=? AND status='active'",
+            (owner_id, person_id, GIFT_PROFILE_EVENT_TYPE)):
+        view = _gift_entry_view(db, r["event_id"])
+        if view and view["category"] == category and view["value"] == value:
+            return view
+    return None
+
+
+def add_gift_profile_entry(db, owner_id, person_id, category, value, happened_on="",
+                           provider="我本人", source_utterance=""):
+    """新增一条送礼对象档案（偏好/尺寸/忌讳/上次送过什么）。同一值重复提交幂等。"""
+    if category not in GIFT_PROFILE_CATEGORIES:
+        raise ValueError("档案类别须为：%s" % "/".join(GIFT_PROFILE_CATEGORIES))
+    value = (value or "").strip()
+    if not value:
+        raise ValueError("档案内容不能为空")
+    person = db.row("SELECT * FROM person WHERE person_id=? AND owner_id=?", (person_id, owner_id))
+    if person is None:
+        raise ValueError("送礼对象不在你的记录里")
+    existing = _active_gift_entry(db, owner_id, person_id, category, value)
+    if existing is not None:
+        return existing
+    event_id, _created = import_life_event(
+        db, source_id=_gift_source_id(person_id, category, value),
+        subject_id=person_id, event_type=GIFT_PROFILE_EVENT_TYPE,
+        payload={"category": category, "value": value},
+        happened_on=happened_on or dbm.now_iso()[:10],
+        provider=provider or "我本人", owner_id=owner_id,
+        source_kind=GIFT_PROFILE_EVENT_TYPE)
+    db.audit("", owner_id, "gift_profile_added",
+             {"event_id": event_id, "person_id": person_id, "category": category}, owner_id=owner_id)
+    return _gift_entry_view(db, event_id)
+
+
+def correct_gift_profile_entry(db, owner_id, event_id, value):
+    """更正一条档案：旧值 superseded（仅作来源可查），写入新值。仅所有者。"""
+    value = (value or "").strip()
+    if not value:
+        raise ValueError("更正内容不能为空")
+    row = db.row("SELECT * FROM life_event WHERE event_id=?", (event_id,))
+    if row is None or row["event_type"] != GIFT_PROFILE_EVENT_TYPE:
+        raise ValueError("档案条目不存在")
+    if row["owner_id"] != owner_id:
+        raise ValueError("只能更正自己记的档案")
+    try:
+        payload = json.loads(row["payload_json"] or "{}")
+    except (ValueError, TypeError):
+        payload = {}
+    category = payload.get("category", "")
+    new_id = correct_life_event(db, event_id, {"category": category, "value": value}, owner_id)
+    db.audit("", owner_id, "gift_profile_corrected",
+             {"old_event_id": event_id, "new_event_id": new_id, "category": category}, owner_id=owner_id)
+    return _gift_entry_view(db, new_id)
+
+
+def revoke_gift_profile_entry(db, owner_id, event_id):
+    """撤回一条档案：tombstone，当前查询不可见，历史仍可查。仅所有者。"""
+    row = db.row("SELECT * FROM life_event WHERE event_id=?", (event_id,))
+    if row is None or row["event_type"] != GIFT_PROFILE_EVENT_TYPE:
+        raise ValueError("档案条目不存在")
+    revoke_life_event(db, event_id, owner_id)
+    return True
+
+
+def grant_gift_profile_field(db, owner_id, event_id, viewer_id, fields):
+    """显式授权某条档案的哪些字段能给谁看。默认不授权（私有）。"""
+    row = db.row("SELECT * FROM life_event WHERE event_id=?", (event_id,))
+    if row is None or row["owner_id"] != owner_id:
+        raise ValueError("只能授权自己记的档案")
+    if not isinstance(fields, list):
+        fields = []
+    db.execute(
+        "INSERT INTO event_grant(grant_id, event_id, viewer_id, fields_json,"
+        " valid_until, note, created_at) VALUES(?,?,?,?,?,?,?)",
+        (dbm.new_id("grant"), event_id, viewer_id, json.dumps(fields, ensure_ascii=False),
+         "", "送礼对象档案授权", dbm.now_iso()))
+    db.audit("", owner_id, "gift_profile_granted",
+             {"event_id": event_id, "viewer_id": viewer_id, "fields": fields}, owner_id=owner_id)
+    return True
+
+
+def gift_target_entries(db, owner_id, person_id, category=None, include_history=False):
+    """某送礼对象的档案条目。默认只回当前有效；include_history 带回被更正/撤回的旧值。"""
+    sql = ("SELECT * FROM life_event WHERE owner_id=? AND subject_id=? AND event_type=?")
+    params = [owner_id, person_id, GIFT_PROFILE_EVENT_TYPE]
+    if not include_history:
+        sql += " AND status='active'"
+    sql += " ORDER BY happened_on DESC, created_at DESC"
+    out = []
+    for r in db.rows(sql, tuple(params)):
+        view = _gift_entry_view(db, r["event_id"])
+        if view is None:
+            continue
+        if category and view["category"] != category:
+            continue
+        out.append(view)
+    return out
+
+
+def list_gift_targets(db, owner_id):
+    """按关系分类分组的送礼对象列表，带条目计数与上次送过什么。"""
+    groups: dict[str, list] = {}
+    targets = []
+    for p in db.rows("SELECT * FROM person WHERE owner_id=? ORDER BY name", (owner_id,)):
+        block = _gift_attrs(db, p["person_id"]).get("gift_target")
+        if not isinstance(block, dict):
+            continue
+        rel = block.get("relationship") or "未分类"
+        entries = gift_target_entries(db, owner_id, p["person_id"])
+        counts = {c: sum(1 for e in entries if e["category"] == c) for c in GIFT_PROFILE_CATEGORIES}
+        item = {"person_id": p["person_id"], "name": p["name"], "relationship": rel,
+                "entry_counts": counts, "entry_total": len(entries),
+                "last_gift": next((e for e in entries if e["category"] == "last_gift"), None)}
+        groups.setdefault(rel, []).append(item)
+        targets.append(item)
+    return {"groups": groups, "targets": targets, "relationships": list(GIFT_RELATIONSHIP_CATEGORIES)}
+
+
+def gift_target_context(db, owner_id, subject_id, viewer_id=""):
+    """授权门后的送礼对象档案块，供模型上下文。
+
+    viewer 默认为 owner_id。授权规则复用 _event_visible_fields：记忆所有者看自己
+    免授权；他人仅见被显式授权（未过期）的字段。value 是敏感内容，以它是否对
+    viewer 可见为准；category 只是标签，不单独作为敏感字段。未授权条目的 value
+    绝不会出现在返回结果里，因而也不会进提示词。
+    """
+    viewer = (viewer_id or owner_id or "").strip() or owner_id
+    result = {"is_gift_target": False, "relationship": "", "entries": [],
+              "last_gift": None, "missing": list(GIFT_PROFILE_CATEGORIES), "basis_count": 0}
+    if not subject_id:
+        return result
+    block = _gift_attrs(db, subject_id).get("gift_target")
+    if not isinstance(block, dict):
+        return result
+    result["is_gift_target"] = True
+    result["relationship"] = block.get("relationship") or "未分类"
+    visible = []
+    for r in db.rows(
+            "SELECT * FROM life_event WHERE subject_id=? AND event_type=? AND status='active'"
+            " ORDER BY happened_on DESC, created_at DESC",
+            (subject_id, GIFT_PROFILE_EVENT_TYPE)):
+        allowed = _event_visible_fields(db, r["event_id"], viewer)
+        if "value" not in allowed:
+            continue
+        try:
+            payload = json.loads(r["payload_json"] or "{}")
+        except (ValueError, TypeError):
+            payload = {}
+        cat, val = payload.get("category") or "", payload.get("value") or ""
+        if not cat or not val:
+            continue
+        visible.append({"event_id": r["event_id"], "category": cat, "value": val,
+                        "provider": r["provider"], "happened_on": r["happened_on"]})
+    result["entries"] = visible
+    result["basis_count"] = len(visible)
+    result["last_gift"] = next((e for e in visible if e["category"] == "last_gift"), None)
+    have = {e["category"] for e in visible}
+    result["missing"] = [c for c in GIFT_PROFILE_CATEGORIES if c not in have]
+    return result
+
+
+# ==================== 通用人际关系分类（t53，壳体） ===================
+# 用户原话（thread_history 01a12033，10-13 16:46）：「人际关系是否应该分个类，
+# 比如亲人/长辈晚辈 朋友 工作伙伴，如果是一个社牛，所有人都并列，会比较难办吧」。
+# 本轮只做壳体：能存、能改、界面标注建设中。不按分类检索、不推荐、
+# 不进任何模型提示词、不影响家庭结构（配偶/同户）与授权判断。
+#
+# 存储取舍：不新表、不迁移——person.attributes_json 本就是人物实体自己的
+# 扩展字段（t49 的送礼对象关系分类同址存放），在其下开 social_class 命名空间。
+# 键名与 t49 的 gift_target 分层隔离，互不占用；不占 person.relation 列。
+# 契约（tests/test_relationship_class_shell.py 锁定）：
+#   person.attributes_json = {"social_class": {"classes": [...], "marked_at": "...", "note": ""}}
+SOCIAL_CLASSES = ("亲人", "长辈", "晚辈", "同龄人", "朋友", "工作伙伴", "其他")
+SOCIAL_CLASS_SHELL_NOTE = ("建设中：这只是人际关系分类本身，能存能改；"
+                           "它还不驱动检索、推荐或任何协商，也不要据此推断家庭结构。")
+_SOCIAL_CLASS_KEY = "social_class"
+
+
+def _social_class_attrs(db, person_id):
+    row = db.row("SELECT attributes_json FROM person WHERE person_id=?", (person_id,))
+    try:
+        attrs = json.loads((row or {}).get("attributes_json") or "{}")
+    except (ValueError, TypeError):
+        attrs = {}
+    return attrs if isinstance(attrs, dict) else {}
+
+
+def get_person_social_classes(db, owner_id, person_id):
+    """读一个人身上的通用人际关系分类。坏数据按未分类，不抛。"""
+    person = db.row("SELECT * FROM person WHERE person_id=? AND owner_id=?",
+                    (person_id, owner_id))
+    if person is None:
+        raise ValueError("这个人物不在你的记录里")
+    block = _social_class_attrs(db, person_id).get(_SOCIAL_CLASS_KEY)
+    if not isinstance(block, dict):
+        return {"classes": []}
+    classes = block.get("classes")
+    return {"classes": [c for c in classes if isinstance(c, str)] if isinstance(classes, list) else [],
+            "marked_at": block.get("marked_at", ""), "note": block.get("note", "")}
+
+
+def set_person_social_classes(db, owner_id, person_id, classes):
+    """设置一个人的通用人际关系分类（可多选、可清空=不分类）。
+
+    先校验后落库：枚举外的取值抛 ValueError，且不改动原值——静默吞掉或
+    先写后判，都会让用户以为设上了。只写 attributes_json 下的 social_class
+    命名空间：person.relation、relation 表、person_link 一律不碰，
+    家庭结构判断与授权不受影响；其他命名空间（如 t49 的 gift_target）原样保留。
+    """
+    if classes is None:
+        classes = []
+    if not isinstance(classes, list):
+        raise ValueError("关系分类须为列表")
+    cleaned = []
+    for c in classes:
+        c = str(c).strip()
+        if c not in SOCIAL_CLASSES:
+            raise ValueError("关系分类须为：%s" % "、".join(SOCIAL_CLASSES))
+        if c not in cleaned:
+            cleaned.append(c)
+    person = db.row("SELECT * FROM person WHERE person_id=? AND owner_id=?",
+                    (person_id, owner_id))
+    if person is None:
+        raise ValueError("这个人物不在你的记录里")
+    attrs = _social_class_attrs(db, person_id)
+    old = attrs.get(_SOCIAL_CLASS_KEY)
+    old = old if isinstance(old, dict) else {}
+    note = old.get("note", "")
+    block = {"classes": cleaned, "marked_at": dbm.now_iso()[:10],
+             "note": note if isinstance(note, str) else ""}
+    attrs[_SOCIAL_CLASS_KEY] = block
+    db.execute("UPDATE person SET attributes_json=? WHERE person_id=?",
+               (json.dumps(attrs, ensure_ascii=False), person_id))
+    db.audit("", owner_id, "social_class_set",
+             {"person_id": person_id, "classes": cleaned}, owner_id=owner_id)
+    return block
+
+
+def list_person_social_classes(db, owner_id):
+    """给界面的壳体数据：可选值、建设中说明、每个人当前的分类。
+
+    不过滤、不推荐、不排序暗示——壳体现在只是「分类本身」。未分类的人
+    也列出来，让用户看得到谁还没有分类。
+    """
+    rows = db.rows("SELECT * FROM person WHERE owner_id=? ORDER BY name", (owner_id,))
+    persons = []
+    for row in rows:
+        if row["name"] == "我":
+            continue
+        block = _social_class_attrs(db, row["person_id"]).get(_SOCIAL_CLASS_KEY)
+        classes = block.get("classes") if isinstance(block, dict) else None
+        persons.append({"person_id": row["person_id"], "name": row["name"],
+                        "relation": row["relation"],
+                        "classes": [c for c in classes if isinstance(c, str)]
+                        if isinstance(classes, list) else []})
+    return {"status": "shell", "note": SOCIAL_CLASS_SHELL_NOTE,
+            "values": list(SOCIAL_CLASSES), "persons": persons}
+
+
+# ==================== 朋友旅行场景（t56） ====================
+# 约朋友一起旅行：复用同一套多方协调引擎，条件字段用 friend_trip 字段集。
+# 与家庭活动、送礼都区分开：送礼句、多家庭活动句都不能误判成朋友旅行。
+FRIEND_TRIP_MARKERS = ("朋友", "旅行", "旅游", "度假", "出游", "想去", "自驾游",
+                       "一起去玩", "约朋友", "闺蜜", "哥们", "老同学", "驴友")
+FAMILY_TRIP_MARKERS = ("几家", "多少个家庭", "多少户", "家庭", "带孩子", "带娃", "遛娃")
+GIFTING_MARKERS = ("礼物", "送礼", "买给", "生日礼", "买什么", "回礼", "还礼")
+
+
+def friend_trip_intent(text):
+    """这句话是约朋友一起旅行，不是家庭活动、也不是送礼。
+
+    判据：有朋友/旅行措辞，且不在说给某个人准备东西（送礼），
+    也不是多家庭一起的活动。「给三家一起出游的孩子们准备礼物」是送礼，
+    「周末三家一起带孩子出去玩」是家庭活动，两者都不算朋友旅行。
+    """
+    t = (text or "").strip()
+    if not t:
+        return False
+    if any(g in t for g in GIFTING_MARKERS):
+        return False
+    if any(f in t for f in FAMILY_TRIP_MARKERS):
+        return False
+    if group_activity_intent(t):
+        return False
+    return any(k in t for k in FRIEND_TRIP_MARKERS)
+
+
+def _clean_companions(companions):
+    """清洗随行声明：姓名可选，填了就必须是人名；每人标注有没有自己的助手。
+
+    返回 {"companions":[{name,has_agent,attendance}], "source": "participation"}。
+    没有配置自己助手的随行者，decision_mode=delegated，由声明人代决策。
+    """
+    if companions is None:
+        companions = []
+    if not isinstance(companions, list):
+        raise ValueError("随行声明须为数组")
+    out, seen = [], set()
+    for c in companions:
+        if isinstance(c, str):
+            c = {"name": c}
+        if not isinstance(c, dict):
+            raise ValueError("随行须为对象")
+        name = str(c.get("name", "")).strip()
+        if not name:
+            continue
+        if len(name) > 20:
+            raise ValueError("随行姓名最长 20 字")
+        if name in seen:
+            continue
+        seen.add(name)
+        att = c.get("attendance", "coming")
+        if att not in ("coming", "not_coming", "tbd"):
+            att = "tbd"
+        out.append({"name": name, "has_agent": bool(c.get("has_agent")),
+                    "attendance": att,
+                    "decision_mode": "self" if c.get("has_agent") else "delegated"})
+    if len(out) > 20:
+        raise ValueError("随行最多 20 人")
+    return {"companions": out, "source": PARTICIPATION_NOTE}
+
+
+def declare_trip_party(db, session, headcount, conditions, companions=None):
+    """朋友旅行：本人声明自己这一方几个人、分别什么类别、出席状态，
+    并**可以自己决定**要不要说出随行是谁。
+
+    随行规则（用户 2026-10-17 定）：
+    - 填不填随行姓名，由声明的人自己决定；不填就只报人数；
+    - 填了姓名的随行者**进共同事项**，成为这一方的成员；
+    - 随行者没有配置自己的 agent/服务时，默认由声明的参与者**代他决策**；
+      代决策是单独一类记录，不算本人接受，也不和「代表审阅只是建议」混为一谈。
+    """
+    if not isinstance(headcount, dict):
+        raise ValueError("人数声明须为对象")
+    if [k for k in headcount if k not in ("adults", "kids", "tbd")]:
+        raise ValueError("人数声明只收 成人/孩子/待定 的计数")
+    cleaned_companions = _clean_companions(companions)
+    counts = {}
+    for k in ("adults", "kids", "tbd"):
+        v = headcount.get(k, 0)
+        if isinstance(v, bool) or not isinstance(v, int) or not 0 <= v <= 50:
+            raise ValueError("人数须为 0–50 的整数")
+        counts[k] = v
+    if sum(counts.values()) <= 0:
+        raise ValueError("请声明这一方的人数，或明确标为待定")
+    cleaned, unknown, confirm = normalize_conditions(conditions, scenario="friend_trip")
+    if unknown or confirm:
+        raise ValueError("条件字段或预算口径不明确")
+    with db.atomic():
+        live = matter_session(db, session["raw_token"])
+        plan = db.row("SELECT kind FROM plan WHERE plan_id=?", (live["plan_id"],))
+        if (plan or {}).get("kind") != "friend_trip":
+            raise ValueError("人数声明只用于朋友旅行场景")
+        _, side = _member(db, live["plan_id"], live["guest_id"])
+        db.execute(
+            "UPDATE plan_participant SET headcount_json=?,conditions_json=?,companions_json=?"
+            " WHERE participant_id=?",
+            (json.dumps(dict(counts, source=PARTICIPATION_NOTE), ensure_ascii=False),
+             json.dumps(cleaned, ensure_ascii=False),
+             json.dumps(cleaned_companions, ensure_ascii=False), side["participant_id"]))
+        invalidate_plan_dependencies(db, live["plan_id"], "朋友旅行参与方更新自己一方的人数与条件")
+    return {"ok": True, "headcount": counts, "companions": cleaned_companions}
+
+
+# 三个虚构朋友的演示资料：明确虚构、不含真实个人信息，独立于 A/B/C 家庭演示数据。
+FRIEND_DEMO_PERSONS = (
+    ("阿远", "虚构演示朋友，喜欢徒步和摄影"),
+    ("小奈", "虚构演示朋友，爱吃辣、想海边度假"),
+    ("老K", "虚构演示朋友，预算敏感、可能带家人"),
+)
+
+
+def seed_friend_trip_demo(db, owner_id="A"):
+    """建三个虚构朋友人物，跑通朋友旅行场景用。幂等，不改动既有家庭演示数据。"""
+    created = []
+    for name, note in FRIEND_DEMO_PERSONS:
+        if _person_by_name(db, owner_id, name) is not None:
+            continue
+        pid = dbm.new_id("p")
+        db.execute("INSERT INTO person(person_id,owner_id,name,relation,note) VALUES(?,?,?,?,?)",
+                   (pid, owner_id, name, "朋友", note))
+        created.append({"person_id": pid, "name": name})
+    return {"created": created, "note": "虚构演示人物，非真实个人信息"}

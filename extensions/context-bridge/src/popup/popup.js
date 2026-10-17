@@ -98,12 +98,22 @@
     return map[e.code] || e.message || "操作失败，请重试。";
   }
 
+  /* 「已连接」要说得清连的是哪台设备：设备名是配对时给这台电脑起的名字，
+     在应用里认设备、撤销设备都靠它；括号里是这个助手属于谁。
+     老会话没有存过设备名时退回只显示归属，不留空括号。 */
+  function whoText(client) {
+    const owner = client.display_name || client.user_id || "本人";
+    return client.client_name
+      ? "已连接：" + client.client_name + "（" + owner + "）"
+      : "已连接：" + owner;
+  }
+
   async function refreshStatus() {
     const res = await msg({ type: "cb:status" });
     if (!res.ok) { fail(friendly(res)); return; }
     const client = res.data && res.data.client;
     if (client) {
-      who.textContent = "已连接：" + (client.display_name || client.user_id || "本人");
+      who.textContent = whoText(client);
       show("tasks");
       await loadTasks();
     } else {
@@ -778,7 +788,13 @@
     const res = await msg({ type: "cb:pair", code, client_name: $("pair-name").value.trim() || "随身助手" });
     $("btn-pair").disabled = false;
     if (!res.ok) { fail(friendly(res)); return; }
-    who.textContent = "已连接：" + (res.data.display_name || "本人");
+    // 刚连上就把设备名和归属说清：设备名来自本次配对输入，归属在 user 下。
+    // 旧代码读 res.data.display_name（顶层没有这个字段）永远落到「本人」。
+    who.textContent = whoText({
+      client_name: res.data.client_name,
+      display_name: res.data.user && res.data.user.display_name,
+      user_id: res.data.user && res.data.user.user_id,
+    });
     show("tasks");
     await loadTasks();
   });

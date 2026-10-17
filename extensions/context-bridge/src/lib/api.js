@@ -270,6 +270,10 @@
       const client = {
         client_id: pairResult.client_id,
         expires_at: pairResult.expires_at,
+        // 设备名单独存：配对时用户给这台电脑起的名字（如「我的电脑 Chrome」）。
+        // 少了它，界面只能显示「已连接：某人」，说不出连的是哪台设备、
+        // 在应用里要撤销的是哪一台。
+        client_name: pairResult.client_name || "",
         user_id: pairResult.user && pairResult.user.user_id,
         display_name: pairResult.user && pairResult.user.display_name,
       };

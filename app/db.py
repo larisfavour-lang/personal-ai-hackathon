@@ -314,6 +314,9 @@ CREATE TABLE IF NOT EXISTS plan_participant (
     role TEXT NOT NULL DEFAULT 'family',
     -- 孩子出席：{"person_id": "coming"|"not_coming"|"unknown"}，由各家自己说。
     attendance_json TEXT NOT NULL DEFAULT '{}',
+    -- 朋友旅行：这一方只声明的人数与出席 {"adults":N,"kids":N,"tbd":N,"source":...}，
+    -- 不含姓名（随行姓名留在本人私有记录，不进共同事项）。家庭场景留空对象。
+    headcount_json TEXT NOT NULL DEFAULT '{}',
     created_at TEXT NOT NULL
 );
 
@@ -491,6 +494,20 @@ CREATE TABLE IF NOT EXISTS event_plan_link (
  status TEXT NOT NULL DEFAULT 'active', created_at TEXT NOT NULL,
  UNIQUE(event_id,plan_id,owner_id)
 );
+CREATE TABLE IF NOT EXISTS app_connector (
+ connector_id TEXT PRIMARY KEY, owner_id TEXT NOT NULL,
+ kind TEXT NOT NULL, name TEXT NOT NULL, base_url TEXT NOT NULL DEFAULT '',
+ path TEXT NOT NULL DEFAULT '', auth_ref TEXT NOT NULL DEFAULT '',
+ field_map_json TEXT NOT NULL DEFAULT '{}', status TEXT NOT NULL DEFAULT 'disconnected',
+ last_sync_at TEXT NOT NULL DEFAULT '', last_error TEXT NOT NULL DEFAULT '',
+ created_at TEXT NOT NULL, revoked INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS connector_record (
+ connector_id TEXT NOT NULL, external_id TEXT NOT NULL, source_id TEXT UNIQUE NOT NULL,
+ event_id TEXT NOT NULL, authorized_fields_json TEXT NOT NULL DEFAULT '[]',
+ PRIMARY KEY(connector_id, external_id)
+);
+
 CREATE TABLE IF NOT EXISTS audit_log (
     audit_id TEXT PRIMARY KEY,
     task_id TEXT NOT NULL DEFAULT '',
@@ -580,6 +597,15 @@ class DB:
                              " TEXT NOT NULL DEFAULT 'family'")
             if "attendance_json" not in ppm:
                 conn.execute("ALTER TABLE plan_participant ADD COLUMN attendance_json"
+                             " TEXT NOT NULL DEFAULT '{}'")
+            # 旧库补 headcount_json：朋友旅行场景的人数与出席声明。
+            if "headcount_json" not in ppm:
+                conn.execute("ALTER TABLE plan_participant ADD COLUMN headcount_json"
+                             " TEXT NOT NULL DEFAULT '{}'")
+            # 旧库补 companions_json：朋友旅行场景的随行人员。姓名由声明人自己决定
+            # 填不填；填了的随行者进共同事项，未配自己助手的由声明人代决策。
+            if "companions_json" not in ppm:
+                conn.execute("ALTER TABLE plan_participant ADD COLUMN companions_json"
                              " TEXT NOT NULL DEFAULT '{}'")
             # 旧库补 task.plan_id：不补的话，误当成送礼的旧事项转成家庭活动后
             # 没有地方记新事项的 id，用户点开旧的只能看到一句话，回不去。

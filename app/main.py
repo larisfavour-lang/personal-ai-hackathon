@@ -967,6 +967,150 @@ def api_correct_life_event(event_id: str, body: CorrectEventBody, request: Reque
     return {"new_event_id": new_id}
 
 
+# ==================== 送礼对象档案（t49） ====================
+# 复用 life_event/person，不建平行表；关系分类存 person.attributes_json.gift_target。
+# 身份一律来自服务端会话；body 带 owner_id 时按会话校验，没带就用会话本人。
+class GiftTargetBody(BaseModel):
+    owner_id: str = ""
+    name: str = ""
+    relationship: str = ""
+    person_id: str = ""
+    note: str = ""
+
+
+class GiftEntryBody(BaseModel):
+    owner_id: str = ""
+    category: str
+    value: str = Field(min_length=1, max_length=300)
+    happened_on: str = ""
+    provider: str = "我本人"
+    source_utterance: str = ""
+
+
+class GiftCorrectBody(BaseModel):
+    owner_id: str = ""
+    value: str = Field(min_length=1, max_length=300)
+
+
+class GiftRelationshipBody(BaseModel):
+    owner_id: str = ""
+    relationship: str
+
+
+class GiftGrantBody(BaseModel):
+    owner_id: str = ""
+    viewer_id: str
+    fields: list[str] = []
+
+
+class SocialClassBody(BaseModel):
+    # 通用人际关系分类（t53 壳体）：可多选，空列表表示不分类。
+    # 取值在 service.SOCIAL_CLASSES 内校验，未知值 422 且不改原值。
+    owner_id: str = ""
+    classes: list[str] = []
+
+
+@app.get("/api/gift-targets")
+def api_gift_targets(request: Request):
+    # 纯数据路由：按关系分组列出送礼对象。不调模型。
+    owner_id = current_user(request)
+    return service.list_gift_targets(db, owner_id)
+
+
+@app.post("/api/gift-targets")
+def api_create_gift_target(body: GiftTargetBody, request: Request):
+    owner_id = _session_owner(body.owner_id, request)
+    try:
+        return service.create_gift_target(db, owner_id, name=body.name,
+                                          relationship=body.relationship,
+                                          person_id=body.person_id, note=body.note)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.post("/api/gift-targets/{person_id}/relationship")
+def api_set_gift_relationship(person_id: str, body: GiftRelationshipBody, request: Request):
+    owner_id = _session_owner(body.owner_id, request)
+    try:
+        block = service.set_gift_relationship(db, owner_id, person_id, body.relationship)
+        return {"person_id": person_id, "gift_target": block}
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.post("/api/gift-targets/{person_id}/entries")
+def api_add_gift_entry(person_id: str, body: GiftEntryBody, request: Request):
+    owner_id = _session_owner(body.owner_id, request)
+    try:
+        return service.add_gift_profile_entry(
+            db, owner_id, person_id, body.category, body.value,
+            happened_on=body.happened_on, provider=body.provider,
+            source_utterance=body.source_utterance)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.get("/api/gift-targets/{person_id}")
+def api_gift_target_detail(person_id: str, request: Request):
+    owner_id = current_user(request)
+    target = db.row("SELECT person_id, name FROM person WHERE person_id=? AND owner_id=?",
+                    (person_id, owner_id))
+    if target is None:
+        raise HTTPException(status_code=404, detail="送礼对象不在你的记录里")
+    return {"person_id": person_id, "name": target["name"],
+            "entries": service.gift_target_entries(db, owner_id, person_id),
+            "history": service.gift_target_entries(db, owner_id, person_id, include_history=True),
+            "context": service.gift_target_context(db, owner_id, person_id, viewer_id=owner_id)}
+
+
+@app.post("/api/gift-targets/entries/{event_id}/correct")
+def api_correct_gift_entry(event_id: str, body: GiftCorrectBody, request: Request):
+    owner_id = _session_owner(body.owner_id, request)
+    try:
+        return service.correct_gift_profile_entry(db, owner_id, event_id, body.value)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.post("/api/gift-targets/entries/{event_id}/revoke")
+def api_revoke_gift_entry(event_id: str, request: Request):
+    # 撤回只需 event_id + 会话身份，不需要 body。
+    owner_id = current_user(request)
+    try:
+        service.revoke_gift_profile_entry(db, owner_id, event_id)
+        return {"revoked": True, "event_id": event_id}
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.post("/api/gift-targets/entries/{event_id}/grant")
+def api_grant_gift_entry(event_id: str, body: GiftGrantBody, request: Request):
+    owner_id = _session_owner(body.owner_id, request)
+    try:
+        service.grant_gift_profile_field(db, owner_id, event_id, body.viewer_id, body.fields)
+        return {"granted": True, "event_id": event_id, "viewer_id": body.viewer_id}
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.get("/api/social-classes")
+def api_social_classes(request: Request):
+    # 通用人际关系分类壳体（t53）：可选值、建设中说明、每人当前分类。
+    # 纯数据路由，不调模型；分类不驱动任何能力，界面据此标注「建设中」。
+    owner_id = current_user(request)
+    return service.list_person_social_classes(db, owner_id)
+
+
+@app.post("/api/persons/{person_id}/social-class")
+def api_set_social_class(person_id: str, body: SocialClassBody, request: Request):
+    owner_id = _session_owner(body.owner_id, request)
+    try:
+        block = service.set_person_social_classes(db, owner_id, person_id, body.classes)
+        return {"person_id": person_id, "classes": block.get("classes", [])}
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
 @app.post("/api/record")
 def api_record(body: UtteranceBody, request: Request):
     owner_id = _session_owner(body.owner_id, request)
@@ -1843,6 +1987,14 @@ class GuestConditionBody(BaseModel):
     children_count:int | None=Field(default=None,ge=0,le=20)
 
 
+class TripPartyBody(BaseModel):
+    """朋友旅行：本人声明这一方的人数与出席，并自己决定要不要说出随行是谁。"""
+    model_config={'extra':'forbid'}
+    headcount:dict[str,Any]
+    conditions:dict[str,Any]
+    companions:list[Any]=Field(default_factory=list)
+
+
 class GuestDecisionBody(BaseModel):
     model_config={'extra':'forbid'}
     version:int=Field(ge=1)
@@ -1859,6 +2011,15 @@ class GuestReviewBody(BaseModel):
 def api_participation_condition(body:GuestConditionBody,request:Request):
     try:
         return service.guest_condition(db,_guest(request,True),body.conditions,body.children,body.children_count)
+    except ValueError as exc:
+        raise _cap_error(exc)
+
+
+@app.post('/api/participation/trip-party')
+def api_participation_trip_party(body:TripPartyBody,request:Request):
+    try:
+        return service.declare_trip_party(db,_guest(request,True),body.headcount,
+                                          body.conditions,body.companions)
     except ValueError as exc:
         raise _cap_error(exc)
 
@@ -1955,3 +2116,133 @@ def api_create_plan_with_note(body:NotePlanCreateBody,request:Request):
         return service.create_plan_with_note(db,_session_owner(body.owner_id,request),body.title,body.event_id,body.selected_fields,body.public_conditions,body.publish_confirmed)
     except ValueError as exc:
         raise _cap_error(exc)
+
+
+# Never echo submitted values on connector validation errors (including URLs/tokens).
+from fastapi.exceptions import RequestValidationError
+from fastapi.exception_handlers import request_validation_exception_handler
+
+
+@app.exception_handler(RequestValidationError)
+async def connector_validation_error(request: Request, exc: RequestValidationError):
+    if request.url.path.startswith('/api/connectors'):
+        return JSONResponse(status_code=422, content={'detail': [{'loc': list(e['loc']), 'msg': e['msg'], 'type': e['type']} for e in exc.errors()]})
+    return await request_validation_exception_handler(request, exc)
+
+
+# Connector APIs stay inside ordinary owner sessions and same-origin writes.
+CONNECTOR_CSRF: dict[str, str] = {}
+
+
+class ConnectorBody(BaseModel):
+    model_config = {'extra': 'forbid'}
+    kind: str
+    name: str = Field(min_length=1, max_length=60)
+    base_url: str = Field(default='', max_length=300)
+    path: str = Field(default='', max_length=200)
+    field_map: dict[str, str] = {}
+    auth_token: str = Field(default='', max_length=2000)
+
+
+class ConnectorGrantBody(BaseModel):
+    model_config = {'extra': 'forbid'}
+    fields: list[str] = Field(max_length=20)
+
+
+def _connector_owner(request, write=False):
+    owner = current_user(request)
+    sid = request.cookies.get(SESSION_COOKIE) or getattr(request.state, 'new_session', '')
+    if write:
+        _same_origin(request)
+        expected = CONNECTOR_CSRF.get(sid)
+        if not expected or not secrets.compare_digest(request.headers.get('X-CSRF-Token', ''), expected):
+            raise HTTPException(status_code=403, detail='数据接入会话校验失败，请刷新页签后重试')
+    return owner, sid
+
+
+@app.get('/api/connectors')
+def api_connectors(request: Request):
+    owner, sid = _connector_owner(request)
+    token = CONNECTOR_CSRF.setdefault(sid, secrets.token_urlsafe(24))
+    return _with_session(request, {'connectors': service.connector_list(db, owner),
+        'catalog': [{'key': k, **{f: v[f] for f in ('name', 'description')}, 'simulated': True} for k,v in service.CONNECTOR_CATALOG.items()],
+        'csrf_token': token, 'demo_base_url': str(request.base_url).rstrip('/'),
+        'demo_path': '/api/connectors/demo-data'})
+
+
+@app.get('/api/connectors/demo-data')
+def api_connector_demo_data(request: Request):
+    owner, _ = _connector_owner(request)
+    return _with_session(request, {'items': service.connector_demo_items(db, owner), 'simulated': True,
+        'note': '内置本地 HTTP 演示接口，不是真实用户应用数据'})
+
+
+@app.post('/api/connectors')
+def api_connector_create(body: ConnectorBody, request: Request):
+    owner, _ = _connector_owner(request, write=True)
+    try:
+        cid = service.connector_create(db, owner, **body.model_dump())
+        return {'connector_id': cid}
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.post('/api/connectors/{cid}/test')
+def api_connector_test(cid: str, request: Request):
+    owner, _ = _connector_owner(request, write=True)
+    try:
+        return service.connector_test(db, owner, cid)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.post('/api/connectors/{cid}/sync')
+def api_connector_sync(cid: str, request: Request):
+    owner, _ = _connector_owner(request, write=True)
+    try:
+        return service.connector_sync(db, owner, cid)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.post('/api/connectors/{cid}/revoke')
+def api_connector_revoke(cid: str, request: Request):
+    owner, _ = _connector_owner(request, write=True)
+    try:
+        return service.connector_revoke(db, owner, cid)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.post('/api/connectors/{cid}/records/{eid}/authorize')
+def api_connector_authorize(cid: str, eid: str, body: ConnectorGrantBody, request: Request):
+    owner, _ = _connector_owner(request, write=True)
+    try:
+        return service.connector_authorize(db, owner, cid, eid, body.fields)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.post('/api/connectors/{cid}/records/{eid}/correct')
+def api_connector_correct(cid: str, eid: str, body: CorrectEventBody, request: Request):
+    owner, _ = _connector_owner(request, write=True)
+    try:
+        service._connector(db, owner, cid)
+        if not db.row('SELECT 1 FROM connector_record WHERE connector_id=? AND event_id=?', (cid, eid)):
+            raise ValueError('这条记录不属于连接器')
+        return {'new_event_id': service.correct_life_event(db, eid, body.payload, owner)}
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.post('/api/connectors/{cid}/records/{eid}/revoke')
+def api_connector_record_revoke(cid: str, eid: str, request: Request):
+    owner, _ = _connector_owner(request, write=True)
+    try:
+        service._connector(db, owner, cid)
+        if not db.row('SELECT 1 FROM connector_record WHERE connector_id=? AND event_id=?', (cid, eid)):
+            raise ValueError('这条记录不属于连接器')
+        service.revoke_life_event(db, eid, owner)
+        return {'revoked': True}
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc

@@ -136,8 +136,54 @@ def _a_context(db, owner_id, subject_id, extracted, task_id=""):
             for a in auths
         ],
         "requirements": {k: extracted.get(k) for k in SHARABLE_A_CONDITIONS if extracted.get(k) is not None},
+        # 送礼对象档案：授权可见的偏好/尺寸/忌讳/上次送过什么，供提案带依据、明示缺口。
+        # additive：非送礼对象时 is_gift_target=False、entries 空，不影响既有上下文。
+        "gift_target_profile": _service.gift_target_context(db, owner_id, subject_id, viewer_id=owner_id),
     }
     # 本次品类要求单独放在上下文里，供提案时约束商品选择。
+
+
+def _gift_profile_prompt(ctx):
+    """授权可见的送礼对象档案 → 注入模型提示词的正文。
+
+    非送礼对象/无授权条目时返回空串。未授权条目的 value 已被 gift_target_context
+    的授权门滤掉，绝不会出现在这里，因而也不会进提示词。明示依据来自哪几条、
+    还缺什么、不编造。
+    """
+    if not ctx or not ctx.get("is_gift_target"):
+        return ""
+    labels = _service.GIFT_CATEGORY_LABELS
+    rel = ctx.get("relationship") or "未分类"
+    entries = ctx.get("entries") or []
+    lines = ["【送礼对象档案·关系：%s】（私有档案，仅本人授权可见的部分）" % rel]
+    if not entries:
+        lines.append("（当前没有已授权的档案条目可作为依据）")
+    else:
+        for e in entries:
+            lines.append("- %s：%s（提供者 %s，%s，依据条目 %s）" % (
+                labels.get(e.get("category"), e.get("category")), e.get("value", ""),
+                e.get("provider") or "未标注", e.get("happened_on") or "日期未标注",
+                e.get("event_id", "")))
+        lg = ctx.get("last_gift")
+        if lg:
+            lines.append("上次送过：%s（%s）" % (lg.get("value", ""), lg.get("happened_on") or ""))
+    missing = ctx.get("missing") or []
+    if missing:
+        lines.append("还缺：%s。缺的要据实向对方问，不替对方编尺寸、不编偏好。" %
+                     "、".join(labels.get(m, m) for m in missing))
+    lines.append("回复与每个候选都要明示依据来自上面哪几条（可指依据条目号）；不要引用不存在的档案。")
+    return "\n".join(lines)
+
+
+def _gift_recommendation_prompt(ctx):
+    """「送什么好」推荐指令：每个候选须指回具体依据；没有依据就说不知道，不用常见款凑。"""
+    base = _gift_profile_prompt(ctx)
+    rule = ("推荐规则：每个候选必须注明依据——指明是依据上面哪条档案或上次送过什么；"
+            "没有依据就说「不知道，需要先了解对方的偏好/尺寸」，据实询问，"
+            "不要用常见款凑数，不要编造对方的偏好或尺寸。")
+    if not (ctx and ctx.get("basis_count")):
+        rule += "当前没有任何已授权档案作为依据：直接说明还不了解对方，据实询问，不要推荐具体商品。"
+    return (base + "\n" + rule) if base else rule
 
 
 def _b_context(db, subject_id, a_proposal, extracted):
@@ -374,6 +420,11 @@ def _a_propose(db, client, task_id, ctx, products, version, feedback=None):
         "商品列表": product_lines,
         "提案版本": version,
     }
+    # 送礼对象档案 + 推荐依据：只带入授权可见部分，明示依据来自哪几条、还缺什么、
+    # 不编造；没有依据就说不知道，不用常见款凑。非送礼对象时不加这个键。
+    _gp = ctx.get("gift_target_profile") or {}
+    if _gp.get("is_gift_target"):
+        user["送礼对象档案与推荐依据"] = _gift_recommendation_prompt(_gp)
     if picked is not None and picked["product_id"]:
         # 明确告诉模型这一件是用户自己选的，不要另选一件。
         # 仍然要过一遍硬条件检查，所以只在指令层面约束，不绕过检查。
@@ -696,6 +747,12 @@ def run_negotiation(db, client, task_id, max_rounds=MAX_ROUNDS):
                     "provider": f["provider"], "observed_on": f["observed_on"],
                     "side": other,
                 })
+    # 送礼对象档案条目也记进依据：每条指回具体 event_id，让「依据来自哪几条」可追溯。
+    for _ge in (a_ctx.get("gift_target_profile") or {}).get("entries") or []:
+        facts_used.append({
+            "attribute": "送礼档案:" + _ge["category"], "value": _ge["value"],
+            "provider": _ge.get("provider", ""), "observed_on": _ge.get("happened_on", ""),
+            "side": owner_id, "basis": "gift_profile", "event_id": _ge["event_id"]})
 
     db.execute("UPDATE task SET stage='negotiating' WHERE task_id=?", (task_id,))
     db.audit(task_id, owner_id, "extracted", extracted)
@@ -948,13 +1005,13 @@ def run_negotiation(db, client, task_id, max_rounds=MAX_ROUNDS):
 # 一方改时间，受影响的旧接受失效。
 
 
-def _plan_allowed_keys():
-    """方案字段白名单。键值和用户改条件的字段保持一致。
+def _plan_allowed_keys(scenario="group_activity"):
+    """方案字段白名单。键值和用户改条件的字段保持一致（按场景取）。
 
     在函数里取而不是模块顶层：service 正在初始化时 agents 就被导入，
     顶层取会踩到循环导入。
     """
-    return _service.PLAN_CONDITION_KEYS
+    return _service.condition_keys(scenario)
 
 
 def _plan_context(db, plan_id):
@@ -966,6 +1023,11 @@ def _plan_context(db, plan_id):
     st = _service.plan_status(db, plan_id)
     if st is None:
         return None
+    kind = (db.row("SELECT kind FROM plan WHERE plan_id=?", (plan_id,)) or {}).get("kind", "group_activity")
+    if kind == "friend_trip":
+        # 朋友旅行走自己的上下文：不带家庭专属字段（孩子安排/孩子出席/家庭），
+        # 只带各方声明的人数与条件；随行姓名不进共同事项。
+        return _friend_trip_context(db, plan_id, st)
     sides = []
     for s in st["participants"]:
         if s.get("role") in ("guest_pending", "guest_revoked", "retired"):
@@ -1022,8 +1084,75 @@ def _plan_context(db, plan_id):
     }
 
 
-def _budget_violation(ctx, content):
+def _friend_trip_context(db, plan_id, st):
+    """朋友旅行上下文：只带各方自己授权的人数(成人/孩子/待定)与条件。
+
+    不带家庭专属字段(孩子安排/孩子出席/家庭)。随行姓名由声明人自己决定填不填：
+    填了的进共同事项，模型据此安排名额与预算；没配自己助手的随行者标注代决策，
+    代决策不是本人同意。顶层键与家庭上下文对齐，供 plan_propose/plan_replan 读取。
+    """
+    sides = []
+    for s in st["participants"]:
+        if s.get("role") in ("guest_pending", "guest_revoked", "retired"):
+            continue
+        hc = s.get("headcount") or {}
+        comps = s.get("companions") or []
+        sides.append({
+            "owner_id": s["owner_id"],
+            "参与方": s["label"],
+            "一方人数与出席": {k: hc.get(k, 0) for k in ("adults", "kids", "tbd")},
+            # 声明人自己决定说出来的随行：有名有姓，模型可按真实人数与需求安排。
+            "随行": [{"称呼": c["name"],
+                      "出席": {"coming": "来", "not_coming": "不来", "tbd": "待定"}.get(c.get("attendance"), "待定"),
+                      "谁决策": "本人（其配有自己的助手）" if c.get("has_agent")
+                               else "由本参与方代决策（其未配置自己的助手）"}
+                     for c in comps],
+            "这一方的条件": s["conditions"],
+            "是否必须参加": "是" if s["required"] else "否",
+            "当前表态": {"accept": "已接受", "reject": "不接受", "counter": "提了修改意见",
+                         "pending": "还没回复", "stale": "接受的是旧版本，已失效"}.get(s["state"], s["state"]),
+            "资料边界": "只带本人声明的人数、随行与条件；不读整本档案；代决策不算本人同意",
+        })
+    return {
+        "场景": "朋友旅行",
+        "事项": st["title"],
+        "用户原话": st["utterance"],
+        "当前版本": st["current_version"],
+        "上一版方案": dict(st["proposal"] or {}),
+        "各方条件": sides,
+        "还没回复的家庭": st["waiting_on"],
+        "是否已约定": st["agreed"],
+        "目标家庭数": 0,
+        "确认缺口": st.get("confirmation_gaps", []),
+    }
+
+
+def _friend_budget_violation(ctx, content):
+    """朋友旅行预算校验：本人预算上限只能填提案方自己给出的金额；
+    人均预算只能来自某方自己给出的，不合成、不相加、不冒认。"""
+    sides = ctx.get("各方条件", [])
+    caps = {s["owner_id"]: s.get("这一方的条件", {}).get("本人预算上限")
+            for s in sides if s.get("这一方的条件", {}).get("本人预算上限")}
+    bad = []
+    cap = content.get("本人预算上限")
+    if cap:
+        proposer = ctx.get("提案方")
+        mine = caps.get(proposer) if proposer else None
+        if not mine or str(cap).strip() != str(mine).strip():
+            bad.append("本人预算上限只能填提案方自己给出的金额，不能改数或替别人定")
+    pc = content.get("人均预算")
+    if pc:
+        vals = {str(s.get("这一方的条件", {}).get("人均预算")).strip()
+                for s in sides if s.get("这一方的条件", {}).get("人均预算")}
+        if str(pc).strip() not in vals:
+            bad.append("人均预算没有一致授权依据，不能合成或冒认")
+    return bad
+
+
+def _budget_violation(ctx, content, scenario="group_activity"):
     """Validate amounts semantically, but never invent or aggregate caps."""
+    if scenario == "friend_trip":
+        return _friend_budget_violation(ctx, content)
     import re
     from decimal import Decimal
     def amount(v):
@@ -1099,6 +1228,7 @@ def plan_propose(db, client, plan_id, proposer="A", feedback=None):
     if not any(s["owner_id"] == proposer for s in ctx["各方条件"]):
         raise ValueError("你在这个事项里没有代表的一方")
     ctx["提案方"] = proposer
+    _kind = (db.row("SELECT kind FROM plan WHERE plan_id=?", (plan_id,)) or {}).get("kind", "group_activity")
     system = (
         "你是活动规划助手。多个家庭要一起办一次本地活动，"
         "你只能依据「各方条件」里每个家庭自己提供的条件来安排。\n"
@@ -1124,8 +1254,38 @@ def plan_propose(db, client, plan_id, proposer="A", feedback=None):
         "7. 「活动总预算」只能来自某一家自己给出的总预算；没人给就留空，"
         "并在 conflicts 里写清「还没有任何一家给出活动总预算」。\n"
         "8. 不给任何家庭自动安排出资、分工或代表权：谁出多少、谁负责什么，"
-        "都由那一方自己说。\n9. content 的「本人出资上限」仅填提案方自己的原金额或空串；其他家庭逐家上限保留在备注，不给未知家庭编值。" % "、".join(_plan_allowed_keys())
+        "都由那一方自己说。\n9. content 的「本人出资上限」仅填提案方自己的原金额或空串；其他家庭逐家上限保留在备注，不给未知家庭编值。" % "、".join(_plan_allowed_keys(_kind))
     )
+    if _kind == "friend_trip":
+        # 朋友旅行用旅行口径的提示词：不提家庭/孩子/活动总预算那套，
+        # 只依据各方自己给的条件与声明的人数（不含随行姓名）来排。
+        system = (
+            "你是出行规划助手。几个朋友要一起出去玩，"
+            "你只能依据「各方条件」里每个参与方自己提供的条件来安排。\n"
+            "「这一方的条件」就是这个参与方已经给出的限制，照着排就行。"
+            "「一方人数与出席」是这一方自己声明的 成人/孩子/待定 人数，不含姓名，"
+            "你不要追问或编造随行的是谁。\n"
+            "「当前表态」说的是某个参与方对上一版方案的态度，和给没给条件是两件事："
+            "还没表态不等于没有条件，也不能把条件写成「待确认」这类占位。\n"
+            "只输出一个 JSON 对象，字段：\n"
+            "  content: 对象，只能包含这些键：%s。\n"
+            "  reason: 字符串，一两句说明这版怎么兼顾各方条件的。\n"
+            "  conflicts: 字符串数组，列出你没法同时满足的条件，没有就空数组。\n"
+            "规则：\n"
+            "1. 不能替任何一方决定他没给过的条件，也不能把别家的条件安到另一方头上。\n"
+            "2. 每个人想去的目的地、假期长度、住宿标准可能不一样，第一版按已给条件排，"
+            "把调不齐的写进 conflicts，不强行统一；预算没依据必须留空。\n"
+            "3. 有参与方还没回复时，同样照已给条件安排，只把「还没得到谁确认」写进 conflicts。\n"
+            "4. 条件确实冲突时，选一个能满足最多必要参与方的安排，把冲突如实写进 conflicts，"
+            "不要假装各方都满意。\n"
+            "5. 不安排真实订票、付款或对外发消息。\n"
+            "6. 「本人预算上限」只是这一方自己最多愿意出多少，不是他同意出这个数，更不是承诺；"
+            "不许把各方上限相加，也不拿「人均预算」当成谁答应了的总价。\n"
+            "7. 「人均预算」只能来自某一方自己给出的人均预算；没人给就留空。\n"
+            "8. 能否带伴侣等由那一方自己说，不自动替他决定。\n"
+            "9. content 的「本人预算上限」仅填提案方自己的原金额或空串，其他方上限保留在备注，不编值。"
+            % "、".join(_plan_allowed_keys(_kind))
+        )
     user = {
         "各方条件": ctx["各方条件"],
         "上一版方案": ctx["上一版方案"],
@@ -1142,12 +1302,12 @@ def plan_propose(db, client, plan_id, proposer="A", feedback=None):
     ])
     content = data.get("content") if isinstance(data.get("content"), dict) else {}
     # 只保留允许的键，模型多给的字段不进方案。
-    content = {k: v for k, v in content.items() if k in _plan_allowed_keys()}
+    content = {k: v for k, v in content.items() if k in _plan_allowed_keys(_kind)}
     conflicts = [str(c) for c in data.get("conflicts", [])][:6] \
         if isinstance(data.get("conflicts"), list) else []
     # 预算/出资口径由代码判，不靠提示词自觉：判不出依据就不落版本。
     # 落一个把各家上限相加得到的总预算，等于替所有家庭做了承诺。
-    bad = _budget_violation(ctx, content)
+    bad = _budget_violation(ctx, content, scenario=_kind)
     if bad:
         raise ValueError("这一版的预算没有依据：" + "；".join(bad))
     ppid, version = _service.new_plan_proposal(
@@ -1199,6 +1359,7 @@ def plan_replan(db, client, plan_id, feedback=None):
     if ctx is None:
         raise ValueError("事项不存在")
     ctx["提案方"] = db.row("SELECT owner_id FROM plan WHERE plan_id=?", (plan_id,))["owner_id"]
+    _kind = (db.row("SELECT kind FROM plan WHERE plan_id=?", (plan_id,)) or {}).get("kind", "group_activity")
     system = (
         "你是活动规划助手。有家庭刚刚改了自己的条件，你要依据「各方条件」里"
         "每个家庭当前的条件，重排一版内部一致的方案。\n"
@@ -1222,8 +1383,24 @@ def plan_replan(db, client, plan_id, feedback=None):
         "7. 「活动总预算」只能来自某一家自己给出的总预算；没人给就留空，"
         "并在 conflicts 里写清「还没有任何一家给出活动总预算」。\n"
         "8. 不给任何家庭自动安排出资、分工或代表权：谁出多少、谁负责什么，"
-        "都由那一方自己说。\n9. content 的「本人出资上限」仅填提案方自己的原金额或空串；其他家庭逐家上限保留在备注，不给未知家庭编值。" % "、".join(_plan_allowed_keys())
+        "都由那一方自己说。\n9. content 的「本人出资上限」仅填提案方自己的原金额或空串；其他家庭逐家上限保留在备注，不给未知家庭编值。" % "、".join(_plan_allowed_keys(_kind))
     )
+    if _kind == "friend_trip":
+        # 朋友旅行重排：按各方当前条件（旅行字段）重排，不提家庭/孩子/活动总预算。
+        system = (
+            "你是出行规划助手。有参与方刚改了自己的条件，你要依据「各方条件」里"
+            "每个参与方当前的条件，重排一版内部一致的旅行安排。\n"
+            "以各方当前有效的条件为准，不要沿用上一版；把调不齐的写进 conflicts，"
+            "不强行统一，也不用常见行程凑数。\n"
+            "只输出一个 JSON 对象，字段：\n"
+            "  content: 对象，只能包含这些键：%s。\n"
+            "  reason: 字符串，一两句说明这版怎么兼顾各方当前条件。\n"
+            "  conflicts: 字符串数组，列出你没法同时满足的条件，没有就空数组。\n"
+            "规则：不替任何一方决定他没给过的条件；「本人预算上限」只填提案方自己的金额，"
+            "不把各方上限相加、不拿「人均预算」当总价；能否带伴侣等由那一方自己说；"
+            "不安排真实订票、付款或对外发消息。"
+            % "、".join(_plan_allowed_keys(_kind))
+        )
     user = {
         "各方当前条件": ctx["各方条件"],
         "上一版方案": ctx["上一版方案"],
@@ -1239,11 +1416,11 @@ def plan_replan(db, client, plan_id, feedback=None):
         {"role": "user", "content": json.dumps(user, ensure_ascii=False)},
     ])
     content = data.get("content") if isinstance(data.get("content"), dict) else {}
-    content = {k: v for k, v in content.items() if k in _plan_allowed_keys()}
+    content = {k: v for k, v in content.items() if k in _plan_allowed_keys(_kind)}
     conflicts = [str(c) for c in data.get("conflicts", [])][:6] \
         if isinstance(data.get("conflicts"), list) else []
     # 和第一版同一道代码校验：重排同样不能落一个没有依据的总预算。
-    bad = _budget_violation(ctx, content)
+    bad = _budget_violation(ctx, content, scenario=_kind)
     if bad:
         raise ValueError("这一版的预算没有依据：" + "；".join(bad))
     # 重排失败（模型不可用、输出不可解析）会在这里抛出去，
@@ -1294,6 +1471,7 @@ def plan_review(db, client, plan_id, participant_id, version):
     if st.get("needs_replan"):
         raise ValueError("有家庭刚更新了条件，方案要重排后才能审阅")
     content = json.loads(proposal["content_json"])
+    _kind = (db.row("SELECT kind FROM plan WHERE plan_id=?", (plan_id,)) or {}).get("kind", "group_activity")
     system = (
         "你是%s这一方的个人代表。你只依据「我方的条件」判断这一版方案行不行。\n"
         "只输出一个 JSON 对象，字段：\n"
@@ -1304,7 +1482,7 @@ def plan_review(db, client, plan_id, participant_id, version):
         "1. 方案满足我方条件时用 accept；不满足时用 reject 或 counter。\n"
         "2. 不要替别家表态，也不要把别家的条件当成我方的。\n"
         "3. 方案里没有提到我方在意的条件时，不要默认它没问题，要指出来。\n"
-        % (side["label"], "、".join(_plan_allowed_keys()))
+        % (side["label"], "、".join(_plan_allowed_keys(_kind)))
     )
     user = {
         "我方的条件": side["conditions"],
@@ -1330,7 +1508,7 @@ def plan_review(db, client, plan_id, participant_id, version):
         raise ValueError("等待期间有家庭刚更新了条件，方案要重排后才能审阅")
     decision = normalize_decision(data.get("decision")) or "ask_clarify"
     changes = data.get("changes") if isinstance(data.get("changes"), dict) else {}
-    changes = {k: v for k, v in changes.items() if k in _plan_allowed_keys()}
+    changes = {k: v for k, v in changes.items() if k in _plan_allowed_keys(_kind)}
     reason = data.get("reason") if isinstance(data.get("reason"), str) else ""
     # 反提案要落到新版本：这一方改了时间，别家对旧版本的接受随之失效。
     if decision == "counter" and changes:

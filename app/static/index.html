@@ -341,6 +341,22 @@ details[open] summary::before{transform:rotate(90deg)}
   .side.open{transform:none}
 }
 
+/* ---------- 手机窄屏：插件加入入口不呈现 ----------
+   Android 的 Chrome 不支持安装扩展，手机上点「把这台电脑加入助手」只能生成
+   一个没有对端的配对码。窄屏下隐藏桌面加入入口，改为说明 + 回执指引；
+   桌面（含窄桌面窗口拖到 600px 以上的情形）仍走原按钮。 */
+.pair-phone-only{display:none}
+/* 配对码的 5 分钟／限一次是**那个码**的边界，不是连接的时效：
+   写成更小更淡的附属小字，避免读成「连接只有 5 分钟」。 */
+.pair-code-note{margin-top:6px;font-size:12.5px;color:var(--ink-3)}
+@media (max-width:600px){
+  .pair-desktop-only{display:none}
+  .pair-phone-only{display:block}
+}
+
+/* 「更多」收起态：用 class 而不是内联 style，方便测试与读屏。 */
+.hidden{display:none !important}
+
 /* Shared form/control language: tokens above remain the sole palette authority. */
 input:not([type=file]):not([type=checkbox]),textarea,select{
   font:inherit;font-size:16px;color:var(--ink);background:var(--surface);
@@ -1339,6 +1355,10 @@ async function send(text, opts){
   try{
     // 先分清这句话是交办、补充纠正，还是问进展。
     const said = await post("/api/say", {utterance: draft});
+    // 记下这次响应：底部横栏的上下文引导由它推导，见 contextQuick()。
+    lastSaid = said;
+    sawAssistant = true;
+    lastMsgAt = Date.now();
     if(said.kind === "record"){
       thinking.querySelector(".bubble").textContent = said.reply;
       await renderStream();
@@ -1479,6 +1499,9 @@ async function send(text, opts){
     busy = false;
     sendBtn.disabled = !input.value.trim();
     setStatus("准备就绪");
+    // 助手回复已落屏，这时才换成上下文那一套引导。
+    // 放在 finally 里：失败路径也要收尾，不能把首次那套永久挂在横栏上。
+    renderQuick();
   }
 }
 
@@ -2498,6 +2521,8 @@ function noteDraft(){
     // 正在识别中：为真时三个次要选项全部禁用，状态写「正在识别这张图…」，
     // 防止同一张图被连点送出去好几次。
     ocrBusy: false,
+    // 「更多」默认收起：图片操作一组就够，不把六个按钮平铺给用户。
+    showImageMore: false,
     b64: "", media: "", cropped: false, imageOnly: false,
   };
 }
@@ -2524,8 +2549,8 @@ function renderNoteSheet(){
   const d = noteCtx;
   if(!d) return;
   let h = '<h2 id="sheet-title">新建资料</h2>'
-     + '<div class="sub">打字、贴图都行。加一张图就会自动读出图里的文字，'
-     + '直接进正文框，核对过再保存。</div>';
+     + '<div class="sub">打字、贴图都行。先用「图片识别」或「语音输入」选一种方式；'
+     + '选了图片并选定本地文件后，再决定是识别图里的文字还是只把图存进资料库。</div>';
 
   // 正文：打开就能写，不先逼人选人或选模式。
   h += '<section><h4>记什么</h4>'
@@ -2539,29 +2564,28 @@ function renderNoteSheet(){
      // 等于让他把同一段字改两遍。
      + '<div id="note-read-hint" class="sub" style="margin-top:4px"></div>'
      + '<div class="sub" style="margin-top:4px">直接打字就行。'
-     + '「加一张图」会读出图里的文字并直接进正文框——这一步图会送去做识别；'
-     + '不想识别就用「只作配图」，只想认中间一块就用「先裁剪再识别」，'
-     + '这两个都在选图之前选，范围外的画面不会送出去。</div></section>';
+     + '走「图片识别」选定本地文件后，图先只留在本机草稿里；'
+     + '要识别图里的文字（会送去做识别）还是只把图存进资料库，由你在这之后选；'
+     + '只想认中间一块就用「先裁剪再识别」，范围外的画面不会送出去。</div></section>';
 
-  // 图片与语音：草稿旁边的两个动作，不是进入这条草稿的前置门槛。
-  h += '<section><h4>加图片</h4>'
+  // 图片与语音：两个一级选项，不再把四种用法平铺成四个按钮。
+  // 选定本地文件之后才问「识别还是只存」——那时人已经看见图了，
+  // 选择有依据；而且图在本人确认之前一次都不离开设备。
+  h += '<section><h4>输入方式</h4>'
      + '<div style="display:flex;gap:8px;flex-wrap:wrap">'
      + '<button class="btn ghost" id="note-add-photo"'
-     + ' title="加图后会自动读出图里的文字，直接进正文框">加一张图</button>'
-     // 选图之前的两个轻量次入口。默认仍是「加一张图」= 自动识别，
-     // 不恢复成「加图后必须先选怎么用」那一道必经步骤。
-     // 但它们必须在**选文件之前**给出来：原来「先选范围再识别」要等整图
-     // 自动送出去之后才可点，那时候范围外的画面已经离开手机了，
-     // 再点它也谈不上保护——那是个假的隐私路径。
-     + '<button class="btn ghost" id="note-attach-only"'
-     + ' title="只把图存在这条资料里，不识别图里的字">只作配图</button>'
-     + '<button class="btn ghost" id="note-crop-first-entry"'
-     + ' title="先框出要识别的范围，只框里的内容会送去做识别">先裁剪再识别</button>'
+     + ' title="选一张本地图片，再决定识别图里的文字还是只存进资料库">图片识别</button>'
      // 语音用的是浏览器自带的语音识别，不经过我们的服务端、不落我们这边。
-     // 名字就叫「说一段」：这是真能用的功能，写「暂不可用」是把能做到的事
-     // 说成做不到。不支持或不让用麦克风的浏览器，点下去会如实说明。
+     // 不支持或不让用麦克风的浏览器，点下去会如实说明，不冒充成功。
      + '<button class="btn ghost" id="note-add-voice" '
-     + 'title="用浏览器自带的语音识别，说完的话直接进正文，可以再改">说一段</button></div>'
+     + 'title="用浏览器自带的语音识别，说完的话直接进正文，可以再改">语音输入</button></div>'
+     // 第二步：图已进草稿、尚未送出时的明确选择（notePickMode === "ask"）。
+     + '<div id="note-pick-choice" style="margin-top:10px"></div>'
+     // 弹层内可见反馈。#status-line 在主页顶部，被 .sheet（fixed/inset:0/z-index:60）
+     // 整个盖住，写在它里面用户在弹层里什么也看不到——这就是「只作配图没反应」
+     // 的直接原因。图片/语音的每一步状态都写在这里。
+     + '<div id="note-sheet-hint" class="sub" role="status" aria-live="polite" '
+     + 'style="margin-top:8px;min-height:20px"></div>'
      + '<div id="note-attachments" style="display:flex;gap:8px;flex-wrap:wrap;'
      + 'margin-top:10px"></div>'
      + '<div id="note-image-acts" style="margin-top:10px"></div>'
@@ -2594,6 +2618,8 @@ function renderNoteSheet(){
   renderNoteAttachments();
   renderNoteSubjects();
   renderNoteImageActs();
+  renderNotePickChoice();
+  noteSheetHint("");
 }
 
 function renderNoteAttachments(){
@@ -2634,19 +2660,27 @@ function renderNoteSubjects(){
     + '</button>').join("");
 }
 
-/* 加图之后的次要选项。
+/* 图进草稿之后的次要选项。
 
-   加图时已经自动识别过了（见 notePickImage → noteQueueOcr），所以这里
-   三个都不再是必经步骤，降成小号按钮，但仍然都可达：
+   一级选项只有「图片识别 / 语音输入」；选定文件后图先进草稿，本区这三个
+   都不再是必经步骤，降成小号按钮，但仍然都可达：
    - 重新识别：再认一次当前这张图。先把上次插进正文的那段原样撤掉，
      不会在正文里留两遍；
    - 先选范围再识别：图上只有中间一块是要记的、边上拍到的是客厅和家人时，
      用户自己决定哪些内容离开手机。这条是隐私路径，不能因为简化就拿掉；
-   - 只作配图，不识别：那张图可能根本没有文字（奖状、手工作品），
-     把自动识别插进去的那段撤掉，图照旧存。
+   - 撤掉识别文字，只留图：那张图可能根本没有文字（奖状、手工作品），
+     把识别插进去的那段撤掉，图照旧存。已经送出去那一次不会撤回。
 
    识别期间三个全部禁用：同一张图被连点会送出去好几次，白花时间，
    回来还要抢着往正文里插字。 */
+/* 图片相关操作只有这一处：按使用时机分两组，不再和选图后的三选一重复。
+   第一组（当下要拿这张图做什么）在图刚进草稿时由 #note-pick-choice 出；
+   本区是「图已经在草稿里之后」的收尾组：
+     - 重新识别：再认一次当前这张图（先把上次插进正文的那段原样撤掉）；
+     - 先选范围再识别：图上只有中间一块是要记的，边上拍到的是客厅和家人；
+     - 撤掉识别文字，只留图：这段字不要了，但图还在。
+   次要两个（重新识别、撤掉识别文字）默认收在「更多」里，点开不影响第一组；
+   多张图时每段的来源在 #note-read-hint 里逐张列，不会混成一段。 */
 function renderNoteImageActs(){
   const box = $("note-image-acts");
   if(!box) return;
@@ -2654,18 +2688,24 @@ function renderNoteImageActs(){
   const busy = !!noteCtx.ocrBusy;
   const dis = busy ? " disabled" : "";
   const small = 'padding:5px 10px;font-size:12.5px';
-  let h = '<div style="display:flex;gap:8px;flex-wrap:wrap">'
-     + '<button class="btn ghost" id="note-ocr"' + dis + ' style="' + small + '">'
-     + (busy ? "正在识别这张图…" : "重新识别") + '</button>'
+  const more = noteCtx.showImageMore ? "" : " hidden";
+  let h = '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">'
      + '<button class="btn ghost" id="note-crop-first"' + dis + ' style="' + small + '">'
      + '先选范围再识别</button>'
+     + '<button class="btn ghost" id="note-more-acts"' + dis + ' style="' + small + '" '
+     + 'aria-expanded="' + (noteCtx.showImageMore ? "true" : "false") + '" '
+     + 'aria-controls="note-more-acts-box">'
+     + (noteCtx.showImageMore ? "收起" : "更多") + '</button></div>'
+     + '<div id="note-more-acts-box"' + more + ' style="margin-top:8px;'
+     + 'display:flex;gap:8px;flex-wrap:wrap">'
+     + '<button class="btn ghost" id="note-ocr"' + dis + ' style="' + small + '">'
+     + (busy ? "正在识别这张图…" : "重新识别") + '</button>'
      + '<button class="btn ghost" id="note-keep-image"' + dis + ' style="' + small + '">'
-     + '只作配图，不识别</button>'
-     + '</div>'
+     + '撤掉识别文字，只留图</button></div>'
      + '<div class="sub" style="margin-top:6px">'
-     + '加图时已经自动识别过，文字在正文框里，可以直接改。'
-     + '只想认中间一块、或边上拍到了不想外传的内容，用「先选范围再识别」；'
-     + '这张图不要文字，用「只作配图，不识别」。</div>';
+     + '只想认中间一块、或边上拍到了不想外传的内容，用「先选范围再识别」——'
+     + '只有框里的那份会送出去。「撤掉识别文字，只留图」：图本身还在，'
+     + '但已经送出去识别的那一次不会撤回。</div>';
   box.innerHTML = h;
   renderNoteReadHint();
 }
@@ -2706,18 +2746,28 @@ function imageDim(b64, media){
   });
 }
 
-/* 这次选图要走哪条路，由选图**之前**点的那个按钮决定。
-   auto：加图即识别（默认）；attach：只作配图，一次模型都不调；
+/* 这次选图要走哪条路。
+   ask：选定文件后先问「识别还是只存」（默认；图片在本人确认前不出设备）；
+   attach：只作配图，一次模型都不调；
    crop：先框范围，只把框里的内容送去做识别。
    变量在每次选图前重置，不会把上一次的选择留到下一张图。 */
-let notePickMode = "auto";
+let notePickMode = "ask";
+
+/* 弹层内可见反馈。#status-line 在主页顶部，被全屏 .sheet（fixed/inset:0/z-index:60）
+   盖住，只写那里用户在弹层里看不到任何回应——「只作配图没反应」就是这么来的。
+   图片/语音每一步状态都写进弹层内的 #note-sheet-hint。 */
+function noteSheetHint(text){
+  const box = $("note-sheet-hint");
+  if(box) box.textContent = text || "";
+}
 
 async function notePickImage(inputId){
   const inp = $(inputId);
   if(!inp || !inp.files || !inp.files[0]) return;
   const mode = notePickMode;
-  notePickMode = "auto";
+  notePickMode = "ask";
   const f = inp.files[0];
+  noteSheetHint("正在读这张图…");
   setStatus("正在读这张图…");
   try{
     const src = await fileToB64(f);
@@ -2732,6 +2782,7 @@ async function notePickImage(inputId){
       noteCtx.attachments.push({b64: src.b64, media: src.media});
       renderNoteAttachments();
       renderNoteImageActs();
+      noteSheetHint("已只把这张图存进资料库，没有识别图里的字；图没有送出去。");
       setStatus("这张图只作为配图保存，没有识别图里的字");
       return;
     }
@@ -2753,18 +2804,63 @@ async function notePickImage(inputId){
     noteCtx.attachments.push({b64: src.b64, media: src.media});
     renderNoteAttachments();
     renderNoteImageActs();
-    // 加完图就识别，不再弹「这张图要怎么用」让用户先选。
-    // 产品 owner 2026-10-16：「添加资料交互过于复杂，加一张图后就应该在
-    // 弹窗时就让用户识别图片内容还是直接插入输入框」。那一步选择对
-    // 绝大多数情况是白交代一次——加图的人就是要图里的字。
-    // b64/media 由这里传死，识别函数不自己读 noteCtx.b64：连续加两张图时
-    // noteCtx.b64 已经是后一张，读它会认错图。
-    noteQueueOcr(src.b64, src.media);
+    // ask（默认）：图进草稿、缩略图立即可见，但先不送模型——在弹层内给出
+    // 明确二选一，本人点了「识别」或「先裁剪再识别」之后图才离开设备；
+    // 选「只存」则一次都不送。b64/media 在 noteResolvePick 里传死，识别函数
+    // 不自己读 noteCtx.b64：连续加两张图时 noteCtx.b64 已是后一张，读它会认错图。
+    renderNotePickChoice();
+    noteSheetHint("图已进草稿，还没有送出去。要识别图里的文字，还是只把图存进资料库？");
+    return;
   }catch(err){
+    noteSheetHint("没读出这张图：" + err.message);
     setStatus("没读出这张图：" + err.message);
   }finally{
     inp.value = "";
   }
+}
+
+/* 第二步选择：图已在草稿里、尚未送出。三个选项对应三条互斥路径——
+   识别进正文（送模型）、只存不识别（一次都不送）、先裁剪再识别（只送框里那份）。
+   选完这一步，图才可能离开设备。 */
+let notePickResolved = false;
+
+function renderNotePickChoice(){
+  const box = $("note-pick-choice");
+  if(!box) return;
+  if(!noteCtx || !noteCtx.b64 || notePickResolved){ box.innerHTML = ""; return; }
+  const small = 'padding:5px 10px;font-size:12.5px';
+  box.innerHTML = '<div class="sub" style="margin-bottom:6px">这张图要拿来做什么？'
+     + '选「只把图存进资料库」的话，它一次都不会送出去。选完还能在下面改。</div>'
+     + '<div style="display:flex;gap:8px;flex-wrap:wrap">'
+     + '<button class="btn primary" id="note-choice-ocr" style="' + small + '">'
+     + '识别图里的文字，进正文框</button>'
+     + '<button class="btn ghost" id="note-choice-keep" style="' + small + '">'
+     + '只把图存进资料库，不识别</button>'
+     + '<button class="btn ghost" id="note-choice-crop" style="' + small + '">'
+     + '先裁剪再识别</button></div>';
+}
+
+/* 这一步选过了就收起：同一张图不需要再问第二遍。 */
+async function noteResolvePick(kind){
+  if(!noteCtx || !noteCtx.b64) return;
+  notePickResolved = true;
+  const box = $("note-pick-choice");
+  if(box) box.innerHTML = "";
+  if(kind === "keep"){
+    noteSheetHint("已只把这张图存进资料库，没有识别图里的字；图没有送出去。");
+    setStatus("这张图只作为配图保存，没有识别图里的字");
+    renderNoteImageActs();
+    return;
+  }
+  if(kind === "crop"){
+    noteCropFirst();
+    return;
+  }
+  // 识别：b64/media 由这里传死，识别函数不自己读 noteCtx.b64——连续加两张图时
+  // noteCtx.b64 已经是后一张，读它会认错图。
+  noteSheetHint("正在识别这张图…");
+  renderNoteImageActs();
+  await noteQueueOcr(noteCtx.b64, noteCtx.media);
 }
 
 /* 识别排队：一张一张来，不并发。
@@ -2853,6 +2949,7 @@ async function noteRunOcr(b64, media, cropped, reuseEntry){
   if(entry.imageOnly) return;
   noteCtx.ocrBusy = true;
   renderNoteImageActs();
+  noteSheetHint("正在识别这张图…");
   setStatus("正在识别这张图…");
   let picked;
   try{
@@ -2861,6 +2958,8 @@ async function noteRunOcr(b64, media, cropped, reuseEntry){
     entry.error = err.message || "这张图转不成能识别的格式";
     noteCtx.ocrBusy = false;
     renderNoteImageActs();
+    noteSheetHint("识别失败：" + entry.error
+              + "。图已作为配图留下，可以点「重新识别」再试，正文不受影响");
     setStatus("这张图没能识别：" + entry.error
               + "。图已作为配图留下，可以点「重新识别」再试，正文不受影响");
     return;
@@ -2882,6 +2981,8 @@ async function noteRunOcr(b64, media, cropped, reuseEntry){
     entry.error = err.message || "识别没返回结果";
     noteCtx.ocrBusy = false;
     renderNoteImageActs();
+    noteSheetHint("识别失败：" + entry.error
+              + "。图已作为配图留下，可以点「重新识别」再试，正文不受影响");
     setStatus("这张图没能识别：" + entry.error
               + "。图已作为配图留下，可以点「重新识别」再试，正文不受影响");
     return;
@@ -2908,10 +3009,12 @@ async function noteRunOcr(b64, media, cropped, reuseEntry){
   noteCtx.ocrBusy = false;
   renderNoteImageActs();
   if(entry.text){
+    noteSheetHint("识别完成，文字已进上面的正文框，可以直接改");
     setStatus("读完了，文字已经进正文框，可以直接改");
   }else{
     // 模型没读到字也是正常结果（那张图可能真的没有文字）。
     // 不能说成失败——用户会以为自己哪里做错了。
+    noteSheetHint("这张图里没读到文字。图已作为配图留下，正文不受影响");
     setStatus("这张图里没读到文字。图已作为配图留下，正文不受影响");
   }
 }
@@ -2926,24 +3029,23 @@ $("sheet").addEventListener("click", async (e) => {
   const d = noteCtx;
 
   if(e.target.id === "note-add-photo"){
-    notePickMode = "auto";
+    notePickMode = "ask";
+    notePickResolved = false;
+    renderNotePickChoice();
+    noteSheetHint("");
     $("note-photo-input").click();
     return;
   }
-
-  // 选图之前的两个次入口：先把模式记下来，再开同一个文件选择框。
-  // 不另开输入框、不新增接口——只是让用户在文件送出去之前说清要什么。
-  if(e.target.id === "note-attach-only"){
-    notePickMode = "attach";
-    $("note-photo-input").click();
+  // 第二步的三个互斥选项：识别进正文（送模型）/ 只存不识别（一次都不送）/
+  // 先裁剪再识别（只送框里那一份）。见图进入草稿后 notePickImage 的 ask 分支。
+  if(e.target.id === "note-more-acts"){
+    noteCtx.showImageMore = !noteCtx.showImageMore;
+    renderNoteImageActs();
     return;
   }
-
-  if(e.target.id === "note-crop-first-entry"){
-    notePickMode = "crop";
-    $("note-photo-input").click();
-    return;
-  }
+  if(e.target.id === "note-choice-ocr"){ noteResolvePick("ocr"); return; }
+  if(e.target.id === "note-choice-keep"){ noteResolvePick("keep"); return; }
+  if(e.target.id === "note-choice-crop"){ noteResolvePick("crop"); return; }
 
   const openPlanBtn = e.target.closest('[data-act="open-plan"]');
   if(openPlanBtn){
@@ -2960,7 +3062,7 @@ $("sheet").addEventListener("click", async (e) => {
   // 识别已经不是这里的必经步骤了——加图时就自动识别过。
   if(e.target.id === "note-ocr"){
     // 重新识别：先撤掉上次插进正文的那段再认，不会留两遍。
-    if(!d.b64){ setStatus("先加一张图"); return; }
+    if(!d.b64){ setStatus("先选一张图"); noteSheetHint("先选一张图"); return; }
     if(d.ocrBusy) return;
     noteQueueOcr(d.b64, d.media);
     return;
@@ -3056,7 +3158,7 @@ async function noteAttachExtra(inputId){
 /* 先圈范围再识别：可选的那条。图上只有中间一块是要记的、
    边上拍到的是客厅和家人时，用户需要自己决定哪些内容离开手机。 */
 function noteCropFirst(){
-  if(!noteCtx || !noteCtx.b64){ setStatus("先加一张图"); return; }
+  if(!noteCtx || !noteCtx.b64){ setStatus("先选一张图"); noteSheetHint("先选一张图"); return; }
   const dim0 = imageDim(noteCtx.b64, noteCtx.media);
   dim0.then((dim) => {
     if(!dim || !noteCtx){ setStatus("这张图读不出来，换一张试试"); return; }
@@ -3078,81 +3180,158 @@ function noteCropFirst(){
 
    三条老规矩不变：识别结果本人可以改；不说做不到的事；
    浏览器不支持或用户不让用麦克风时如实说明，不假装成功。 */
-let noteSpeech = null;
 
 function speechSupported(){
   return !!(window.SpeechRecognition || window.webkitSpeechRecognition);
 }
 
+/* ---------- 按住说话（t58）：资料弹层与对话输入区共用同一套实现 ----------
+   交互：按下即请求麦克风权限并开始识别，松手/指针离开/取消即收尾；
+   按住期间弹层内常驻「正在听，按住说话」，边说边把识别中的文字写回目标输入框；
+   松开就把半句就地定稿。权限在按下那一刻就要，不等用户说了一半再要。
+   反馈一律走 hint()（调用方传进来的弹层内元素），不写被 .sheet 盖住的 #status-line。
+   各类失败（浏览器不支持、权限被拒、没听到声音、识别服务连不上、启动抛错）
+   都在弹层内如实说明，并把按钮复位成可立即重点，不卡在禁用态。 */
+function attachPushToTalk(btn, opts){
+  if(!btn) return;
+  const o = opts || {};
+  const hint = o.hint || (() => {});
+  const status = o.status || (() => {});
+  const target = o.target;                 // 写字的输入框（textarea/input）
+  const baseText = o.baseText || (() => "");   // 按下前已有的正文
+  const setBaseText = o.setBaseText || (() => {});  // 定稿后回写正文
+  const addKind = o.addKind || (() => {});
+  const label = o.label || "说一段";
+  let rec = null, said = "", pending = "", holding = false;
+
+  const paint = () => {
+    if(!target) return;
+    const base = baseText() || "";
+    target.value = (base ? base + "\n" : "") + said + pending;
+  };
+  const reset = () => {
+    holding = false;
+    btn.textContent = label;
+    btn.disabled = false;
+    btn.setAttribute("aria-pressed", "false");
+  };
+  const fail = (why) => {
+    hint("语音没接上：" + why + "。可以直接打字，或用输入法的语音转文字粘贴进来");
+    status("语音没接上：" + why);
+    reset();
+  };
+  const start = async () => {
+    if(holding) return;
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if(!SR){
+      fail("这个浏览器不能语音识别");
+      return;
+    }
+    // 按下就要权限：getUserMedia 触发一次，让系统授权框立刻出来。
+    // 拿不到权限也照样进识别——权限最终由 SpeechRecognition 自己判，
+    // 但先问一次能让用户在说话之前看到授权框，而不是说了一半才弹。
+    try{
+      if(navigator.mediaDevices && navigator.mediaDevices.getUserMedia){
+        await navigator.mediaDevices.getUserMedia({audio: true});
+      }
+    }catch(err){ /* 权限被拒下面的 onerror 会给出可读原因 */ }
+    said = ""; pending = "";
+    try{
+      rec = new SR();
+    }catch(err){
+      fail(err.message || "启动失败");
+      return;
+    }
+    rec.lang = "zh-CN";
+    rec.interimResults = true;      // 边说边显示，说完就能看出对不对
+    rec.continuous = false;
+    holding = true;
+    btn.disabled = true;            // 听的过程中不允许再按（防连点送多次）
+    btn.setAttribute("aria-pressed", "true");
+    btn.textContent = "正在听，松开结束…";
+    hint("正在听，按住说话；松手就停");
+    status("在听了，说话吧");
+    rec.onresult = (e) => {
+      said = ""; pending = "";
+      for(let i = 0; i < e.results.length; i++){
+        const piece = e.results[i][0].transcript || "";
+        if(e.results[i].isFinal) said += piece;
+        else pending += piece;
+      }
+      paint();
+    };
+    rec.onerror = (e) => {
+      const why = {"not-allowed": "没让用麦克风", "service-not-allowed": "浏览器不让用语音识别",
+                   "no-speech": "没听到声音", "audio-capture": "没有可用的麦克风",
+                   "network": "识别服务没连上"}[e.error || e.code]
+                  || ("出了点问题（" + (e.error || e.code) + "）");
+      fail(why);
+    };
+    rec.onend = () => {
+      // 半句没收尾的就地定稿：不丢掉，也不把没说完的话当成完整一句存起来。
+      if(pending){ said += pending; pending = ""; }
+      if(said){
+        addKind("voice");
+        setBaseText(said);
+        if(target) target.value = baseText() || said;
+        hint("话已转成文字，可以改完再保存");
+        status("话已转成文字，可以改完再保存");
+      }else if(holding){
+        hint("没听到话，可以再按住说一次");
+        status("没听到话");
+      }
+      reset();
+    };
+    try{
+      rec.start();
+    }catch(err){
+      fail(err.message || "启动失败");
+    }
+  };
+  const stop = () => {
+    if(!holding){ reset(); return; }
+    holding = false;
+    btn.textContent = "正在收尾…";
+    try{ rec && rec.stop(); }catch(err){ reset(); }
+  };
+  btn.addEventListener("pointerdown", (e) => { e.preventDefault(); start(); });
+  btn.addEventListener("pointerup", stop);
+  btn.addEventListener("pointercancel", stop);
+  // 手指/指针滑出按钮区域也算松手：不然用户滑走了还在录音，自己不知道。
+  btn.addEventListener("pointerleave", stop);
+  btn.addEventListener("keydown", (e) => {
+    if(e.key === " " || e.key === "Enter"){ e.preventDefault(); start(); }
+  });
+  btn.addEventListener("keyup", (e) => {
+    if(e.key === " " || e.key === "Enter"){ e.preventDefault(); stop(); }
+  });
+  // 供测试与复用：外部也能以同样语义起停。
+  btn.cbPushToTalk = {start: start, stop: stop};
+}
+
+/* 资料弹层的「语音输入」：复用上面那一套，目标框是 #note-text，
+   弹层内反馈走 #note-sheet-hint。 */
 function noteVoice(btn){
   if(!noteCtx) return;
-  // 正在听的时候再点一次就是停止，不让用户找不到地方收尾。
-  if(noteSpeech){
-    noteSpeech.stop();
-    return;
-  }
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if(!SR){
-    setStatus("这个浏览器不能语音识别：可以先用手写或输入法的语音转文字，再粘贴进来");
-    return;
-  }
-  const rec = new SR();
-  noteSpeech = rec;
-  rec.lang = "zh-CN";
-  rec.interimResults = true;   // 边说边显示，说完就能看出对不对
-  rec.continuous = false;
-  let said = "";               // 已经定稿的部分
-  let pending = "";            // 还没定稿的半句
-  btn.disabled = false;
-  btn.textContent = "说完了，点这里停";
-  setStatus("在听了，说话吧");
-
-  const box = $("note-text");
-  const paint = () => {
-    if(!box) return;
-    box.value = (noteCtx.text ? noteCtx.text + "\n" : "") + said + pending;
-  };
-  const finish = () => {
-    if(noteSpeech === rec) noteSpeech = null;
-    btn.textContent = "说一段";
-    btn.disabled = false;
-  };
-  rec.onresult = (e) => {
-    said = ""; pending = "";
-    for(let i = 0; i < e.results.length; i++){
-      const piece = e.results[i][0].transcript || "";
-      if(e.results[i].isFinal) said += piece;
-      else pending += piece;
-    }
-    paint();
-  };
-  rec.onerror = (e) => {
-    const why = {"not-allowed": "没让用麦克风", "service-not-allowed": "浏览器不让用语音识别",
-                 "no-speech": "没听到声音", "audio-capture": "没有可用的麦克风",
-                 "network": "识别服务没连上"}[e.code] || ("出了点问题（" + e.code + "）");
-    setStatus("语音没接上：" + why + "。可以直接打字，或用输入法的语音转文字粘贴进来");
-    finish();
-  };
-  rec.onend = () => {
-    // 半句没收尾的就地定稿：不说丢掉，也不把没说完的话当成完整一句存起来。
-    if(pending){ said += pending; pending = ""; }
-    if(said){
-      noteAddKind("voice");
+  if(btn.cbPushToTalk) return;      // 已绑定过，不重复绑
+  attachPushToTalk(btn, {
+    hint: (t) => noteSheetHint(t),
+    status: (t) => setStatus(t),
+    target: $("note-text"),
+    baseText: () => noteCtx.text || "",
+    setBaseText: (said) => {
       noteCtx.text = (noteCtx.text ? noteCtx.text + "\n" : "") + said;
-      if(box) box.value = noteCtx.text;
-      setStatus("话已转成文字，可以改完再保存");
-    }else{
-      setStatus("没听到话，可以再点一次「说一段」");
-    }
-    finish();
-  };
-  try{
-    rec.start();
-  }catch(err){
-    setStatus("语音没接上：" + (err.message || "启动失败")
-              + "。可以直接打字，或用输入法的语音转文字粘贴进来");
-    finish();
-  }
+    },
+    addKind: (k) => noteAddKind(k),
+    label: "语音输入",
+  });
+  // 首次绑定后立刻响应这次点击（pointerdown 已先于 click 触发过一次 start，
+  // 这里不重复启动，只保证键盘/辅助技术下也能用）。
+}
+
+
+function speechSupported(){
+  return !!(window.SpeechRecognition || window.webkitSpeechRecognition);
 }
 
 /* 保存：草稿的最终值。文字、识别并进来的内容、配图、主体、日期
@@ -3166,7 +3345,7 @@ async function noteSave(btn){
   const hasText = !!text;
   const hasAttach = (d.attachments || []).length > 0;
   if(!hasText && !hasAttach){
-    setStatus("写点什么，或者加一张图再记");
+    setStatus("写点什么，或者选一张图再记");
     return;
   }
   if(!d.subjectId){
@@ -3188,7 +3367,7 @@ async function noteSave(btn){
       // 只作配图时给一份空识别结果，不给 null：传 null 服务端会当成
       // 「还没识别」，自己再调一次模型。用户点了「不识别」就是不要识别，
       // 这次调用既白花时间，还可能覆盖他刚写好的正文。
-      read: d.read || {happened_on: d.day || "", items: [], note: "本条目只作配图，未识别"},
+      read: d.read || {happened_on: d.day || "", items: [], note: "本条目只存图未识别"},
       draft_text: d.text,
       happened_on: d.day,
       attachments: d.attachments.map((a) => ({b64: a.b64, media: a.media})),
@@ -3703,24 +3882,37 @@ $("sheet").addEventListener("click", async (e) => {
 /* ---------- 演示菜单 ---------- */
 $("btn-demo").addEventListener("click", () => {
   let h = '<h2 id="sheet-title">演示设置</h2>'
-    + '<div class="sub settings-intro">模型连接、手机访问与插件配对，都在这里管理。</div>'
+    + '<div class="sub settings-intro pair-desktop-only">模型连接、手机访问与「把这台电脑加入助手」，都在这里管理。</div>'
+    + '<div class="sub settings-intro pair-phone-only">你正在用手机访问，连的是某台电脑上的同一个助手。</div>'
     + '<section class="settings-section"><div class="settings-heading"><h3>当前身份</h3></div>'
-    + '<div class="settings-value">' + esc(meName || "本人") + '（由服务端会话确定）</div>'
-    + '<div class="sub">给谁准备礼物，在具体事项里选对象；这里不切换成别人。</div></section>'
-    + '<section class="settings-section"><div class="settings-heading"><h3>模型连接</h3>'
+    + '<div class="settings-value">' + esc(meName || "本人") + '（由本次会话决定）</div>'
+    + '<div class="sub">普通使用不需要切换身份。演示身份切换默认关闭，只有运行者设了 '
+    + 'PA_DEV_VIEWS=1 才可用，且只改本机演示会话、不产生任何授权。'
+    + '给谁准备礼物，仍在具体事项里选对象。</div></section>'
+    + '<section class="settings-section pair-desktop-only"><div class="settings-heading"><h3>模型连接</h3>'
     + '<span id="demo-model" role="status">检测中</span></div>'
     + '<div class="sub" id="demo-model-detail">正在读当前配置…</div>'
     + '<button class="btn ghost" id="demo-model-config" aria-expanded="false" aria-controls="model-config-box">配置模型服务商</button>'
-    + '<div id="model-config-box"></div></section>'
+    + '<div id="model-config-box"></div>'
+    + '<div class="sub">这一项是运行者维护的，普通用户在手机上看不到也改不了。</div></section>'
     + '<section class="settings-section"><div class="settings-heading"><h3>手机访问</h3></div>'
-    + '<div class="sub">手机与电脑连接同一 Wi-Fi，用局域网地址打开。</div>'
-    + '<button class="btn ghost" id="demo-phone">在手机上打开</button><div id="phone-access"></div></section>'
-    + '<section class="settings-section"><div class="settings-heading"><h3>浏览器插件</h3></div>'
-    + '<div class="sub">连接后只执行你授权的代填，随时可以撤销设备。</div>'
-    + '<button class="btn ghost" id="demo-pair">连接浏览器插件</button><div id="pair-box"></div></section>'
-    + '<section class="settings-section"><div class="settings-heading"><h3>演示资料</h3></div>'
+    + '<div class="sub pair-desktop-only">手机与电脑连接同一 Wi-Fi，用局域网地址打开。</div>'
+    + '<button class="btn ghost pair-desktop-only" id="demo-phone">在手机上打开</button><div id="phone-access" class="pair-desktop-only"></div>'
+    + '<div class="sub pair-phone-only">这一侧是客户端：插件只跑在桌面 Chrome/Edge，手机不用装任何东西。你在手机上交办的事，由这台电脑上的插件去执行，回执回到同一件事里；想看代填回执，打开同一件事，点事项卡上的「查看代填回执」。</div></section>'
+    + '<section class="settings-section"><div class="settings-heading"><h3>把这台电脑加入助手</h3></div>'
+    + '<div class="sub">加入一次长期有效：重开浏览器、换页面都保持着，只有你在这里撤销这台设备才失效。</div>'
+    + '<div class="sub">插件是你在电脑上代替操作页面的那双手，只按你授权的字段代填已批准的商店页面，不提交订单、不付款。它跑在桌面 Chrome/Edge 上；Android 上的 Chrome 不支持安装扩展，所以手机不能安装也不能配对。</div>'
+    + '<div class="sub">手机和这台电脑连的是同一个助手：你在手机上交办的事，由这台电脑上的插件去执行，回执回到同一件事里。不是手机和插件互相配对。</div>'
+    + '<div class="sub pair-desktop-only">加入后随时可以撤销这台设备。</div>'
+    + '<button class="btn ghost pair-desktop-only" id="demo-pair">把这台电脑加入助手</button><div id="pair-box" class="pair-desktop-only"></div>'
+    // 设备列表常驻：不生成配对码也看得到已加入的电脑，可单独撤销。
+    + '<div style="margin-top:10px"><button class="btn ghost pair-desktop-only" id="demo-devices" aria-expanded="false" aria-controls="device-box">管理连接设备</button></div>'
+    + '<div id="device-box" class="pair-desktop-only" style="margin-top:10px"></div>'
+    + '<div class="sub pair-phone-only">插件只跑在桌面 Chrome/Edge 上，手机不能安装也不能配对。在电脑上打开同一服务完成加入，回执会回到这件事里。手机上看代填回执：打开同一件事，点事项卡上的「查看代填回执」。</div></section>'
+    + '<section class="settings-section pair-desktop-only"><div class="settings-heading"><h3>演示资料</h3></div>'
     + '<div class="sub">商品与订单均为测试数据。购买仅作本地模拟登记，没有真实支付或配送。</div>'
-    + '<button class="btn ghost settings-danger" id="demo-reset">重置演示资料</button></section>'
+    + '<button class="btn ghost settings-danger" id="demo-reset">重置演示资料</button>'
+    + '<div class="sub">重置会清掉已连接的插件设备和配对，连过的要重连；这一项只在电脑侧可见。</div></section>'
     + '<button class="btn ghost settings-close" data-close-sheet>关闭</button>';
   $("sheet-body").innerHTML = h;
   $("sheet").classList.add("open");
@@ -3891,6 +4083,12 @@ $("btn-demo").addEventListener("click", () => {
 
   /* 浏览器插件配对：生成一次性配对码，用户在插件里输入它。
      码只在本机有效、5 分钟内有效、只能用一次。 */
+  // 设备列表常驻入口：不生成配对码也看得到已加入的电脑，可单独撤销。
+  $("demo-devices").addEventListener("click", async () => {
+    const btn = $("demo-devices");
+    if(btn) btn.setAttribute("aria-expanded", "true");
+    await loadDevices();
+  });
   $("demo-pair").addEventListener("click", async () => {
     const box = $("pair-box");
     if(!box) return;
@@ -3901,15 +4099,26 @@ $("btn-demo").addEventListener("click", () => {
         body: JSON.stringify({client_name: "浏览器插件"}),
       });
       let h = '<div class="receipt"><b style="font-size:22px;letter-spacing:2px">'
-           + esc(d.code) + '</b><br>在浏览器插件的连接框里输入这 8 位码。</div>';
-      h += '<div class="notice">这个码 5 分钟内有效，只能用一次。'
-         + '配对后插件只按你授权的字段代填已批准的商店页面，'
-         + '可以随时在下面撤销。</div>';
+           + esc(d.code) + '</b><br>点 Chrome 工具栏上的「随身助手」图标，在弹出的窗口里输入这 8 位码。</div>';
+      h += '<div class="notice">连上之后长期有效：重开浏览器、换页面都保持着，'
+         + '只有在下面撤销这台设备或重置演示资料后才需要再连一次。</div>';
+      // 5 分钟、限一次说的只是这个码，不是连接的时效——写成附属小字，
+      // 免得读成「连接只有 5 分钟」。
+      h += '<div class="pair-code-note">这个码 5 分钟内有效、只能用一次；'
+         + '码失效不影响已经连上的设备。</div>';
+      // 设备列表只有一份（常驻的 #device-box）。这里不再自建第二个同 id 容器——
+      // 重复 id 会让 $("device-box") 只取到第一个，是真实缺陷。
+      // 这一处只做「跳到那一份」的次要入口，不复制模块。
       h += '<div style="margin-top:10px">'
-         + '<button class="btn ghost" id="pair-devices">查看和撤销已连接设备</button></div>'
-         + '<div id="device-box" style="margin-top:10px"></div>';
+         + '<button class="btn ghost" id="pair-devices">管理连接设备</button></div>';
       box.innerHTML = h;
-      $("pair-devices").addEventListener("click", () => loadDevices());
+      // 与常驻入口共用同一份 #device-box 与同一个 loadDevices()：
+      // 只看本人、可单独撤销、撤销后凭证立即失效，行为不变。
+      $("pair-devices").addEventListener("click", async () => {
+        const btn = $("demo-devices");
+        if(btn) btn.setAttribute("aria-expanded", "true");
+        await loadDevices();
+      });
     }catch(err){
       box.innerHTML = '<div class="notice">没能生成配对码：' + esc(err.message || "") + '</div>';
     }
@@ -3961,24 +4170,67 @@ async function loadDevices(){
 }
 
 /* ---------- 快捷示例 ---------- */
-// 快捷示例按作品主线排：先记忆在别处被复用，再与人协商办事，
-// 送礼保留为完整执行用例。默认不把每句话都当成买礼物。
-const QUICK = [
-  "小雨这周的数学练得怎么样",
-  "她最近还想画画吗",
-  "记错了，喜欢拼图的是哥哥，妹妹喜欢画画",
-  "给小周的女儿准备生日礼物，300元以内，别和我上次送的重复",
+// 底部横栏两套引导，分开定义、分开判断，不再无差别展示同一组。
+//
+// INTRO：第一次打开、或者离开很久再回来。短，只教这个助手能干什么，
+// 不一次堆六条。默认不把每句话都当成买礼物。
+// CONTEXT：会话中，跟在助手回答末尾。从当前这件事的实际状态推导下一步，
+// 推导不出来就少给或不给——宁可空着，也不拿猜的引导误导人。
+const QUICK_INTRO = [
   "周末三家一起带孩子出去玩，我出 100 以内",
+  "记一下孩子这周的情况",
+  "给小周的女儿准备生日礼物，300元以内，别和我上次送的重复",
   "现在办到哪一步了？",
 ];
-$("quick").innerHTML = QUICK.map((q) => '<button type="button">' + esc(q) + '</button>').join("");
+// 离开多久算「久未使用」。取 30 分钟：短于一次认真的家庭安排沟通，
+// 长于随手回来看看。阈值只影响显示哪一套，不影响任何业务状态。
+const QUICK_IDLE_MS = 30 * 60 * 1000;
+let lastMsgAt = 0;        // 最近一次收发消息的时间戳
+let sawAssistant = false; // 这次会话里有没有出现过助手回复
+let lastSaid = null;      // 最近一次 /api/say 的响应，用来推导上下文引导
+
+/* 上下文引导：从当前这件事推。推不出依据就给空数组，不硬凑。 */
+function contextQuick(){
+  const said = lastSaid;
+  if(!said) return [];
+  const out = [];
+  if(said.plan_id){
+    out.push("打开这件事");
+    // 这几条只在有方案、且还差人或差条件时才给。方案状态由打开时读，
+    // 这里只保证「有方案可看」和「能改自己这一方」。
+    out.push("改我的条件");
+    out.push("看看还差谁");
+  }else if(said.task_id){
+    out.push("打开这件事");
+    out.push("现在办到哪一步了？");
+  }else if(said.kind === "family_update"){
+    out.push("她最近还想画画吗");
+    out.push("记错了，喜欢拼图的是哥哥，妹妹喜欢画画");
+  }
+  return out;
+}
+
+/* 该显示哪一套：没出现过助手回复算首次；距上一条消息超过阈值算久未使用；
+   其余情况走上下文那一套。 */
+function quickSet(){
+  if(!sawAssistant) return QUICK_INTRO;
+  if(Date.now() - lastMsgAt > QUICK_IDLE_MS) return QUICK_INTRO;
+  return contextQuick();
+}
+
+function renderQuick(){
+  const box = $("quick");
+  if(!box) return;
+  const set = quickSet();
+  box.innerHTML = set.map((q) => '<button type="button">' + esc(q) + '</button>').join("");
+}
+renderQuick();
 $("quick").addEventListener("click", (e) => {
   const b = e.target.closest("button");
   if(!b || busy) return;
   // 发出去的那条从横栏上消失。留着它，用户会以为没发成功、再点一次，
   // 同一件事就办了两遍；而且「换商品后重新协商」这类状态已经变了，
   // 旧的那句话还挂在横栏上会误导下一步。
-  // 只移除点中的这一条，其余示例留着——它们演示的是别的事情。
   const text = b.textContent;
   // 发出去就真的从这里消失，失败也不插回来。用户明确要求「发送后从横栏
   // 消失」：失败了还挂在横栏上，他看着会以为刚才没点中，再点一次就把

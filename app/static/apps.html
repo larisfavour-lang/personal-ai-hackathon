@@ -74,6 +74,7 @@ label{display:block;font-size:12.5px;color:var(--ink-3);margin:10px 0 4px}
 .sources h4{margin:0 0 6px;font-size:13px;font-weight:600;color:var(--ink-2)}
 .sources .s{font-size:12.5px;color:var(--ink-2);margin-bottom:3px}
 .big{font-size:14.5px;margin:6px 0 0}
+input,textarea,select{max-width:100%;min-width:0}.mapping-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.consent{display:inline-flex;align-items:center;gap:6px;margin-right:12px}.notice{overflow-wrap:anywhere}details summary{cursor:pointer}.btn{min-height:44px} @media(max-width:400px){.mapping-grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -82,12 +83,15 @@ label{display:block;font-size:12.5px;color:var(--ink-3);margin:10px 0 4px}
     <h1>小应用</h1>
     <a class="back" href="/">返回对话</a>
   </header>
-  <p class="sub">两个各自独立的小应用。学习软件负责记进度，周末安排根据已授权的进度
+  <p class="sub">学习软件负责记进度，数据接入连接应用来源。周末安排根据已授权的进度
     给下一步建议，并说明依据来自哪一条。</p>
 
   <div class="tabs" role="tablist">
     <button class="tab" role="tab" data-view="study" aria-selected="true">学习软件</button>
     <button class="tab" role="tab" data-view="plan" aria-selected="false">周末安排</button>
+    <button class="tab" role="tab" data-view="connectors" aria-selected="false">数据接入</button>
+    <button class="tab" role="tab" data-view="gift" aria-selected="false">送礼管家</button>
+    <button class="tab" role="tab" data-view="relclass" aria-selected="false">关系分类（建设中）</button>
   </div>
 
   <div id="flash" class="state" role="status" aria-live="polite"
@@ -119,7 +123,9 @@ async function api(path, opts){
     // 普通接口用 detail，插件接口用 {error:{...}}。两处都取，谁有内容用谁，
     // 否则服务端给的具体原因会被显示成 [object Object]。
     const fromError = data && data.error && data.error.message;
-    throw new Error(fromError || data.detail || ("HTTP " + r.status));
+    const detail = data.detail;
+    const text = typeof detail === "string" ? detail : Array.isArray(detail) ? detail.map(x=>x.msg||JSON.stringify(x)).join("；") : detail ? JSON.stringify(detail) : "HTTP "+r.status;
+    throw new Error(fromError || text);
   }
   return data;
 }
@@ -474,8 +480,226 @@ async function renderPlan(){
   });
 }
 
+let connectorCsrf = '', draftConnector = '', connectorDraft = null;
+const connectorPost = (path, body={}) => api(path, {method:'POST', headers:{'Content-Type':'application/json','X-CSRF-Token':connectorCsrf}, body:JSON.stringify(body)});
+const connectorStatus = {disconnected:'未连接', connected:'已连接', failed:'失败'};
+function previewHtml(d){
+  let h='<div class="notice"><strong>试运行预览 · 未落库</strong><p>'+ (d.network_request?'真实 HTTP 请求，预览映射后的前 5 条。':'模拟数据，未发起外部网络请求。') + ' 共 '+esc(d.total)+' 条。</p>';
+  for(const row of d.preview||[]){h+='<div class="card"><div class="meta">原始键名：'+esc(row.raw_keys.join('、'))+'</div><dl class="kv">';
+    for(const [k,v] of Object.entries(row.mapped))h+='<dt>'+esc(k)+'</dt><dd>'+esc(v)+'</dd>';
+    h+='</dl>'+row.warnings.map(w=>'<p class="notice bad">'+esc(w)+'</p>').join('')+'</div>';}
+  return h+'</div>';
+}
+async function renderConnectors(){
+  const out=$('out');
+  try{
+    const d=await api('/api/connectors');connectorCsrf=d.csrf_token;
+    const saved=connectorDraft||{name:'我的学习应用',base_url:d.demo_base_url,path:d.demo_path,field_map:{progress:'进度',completed:'已完成项目',date:'发生日期',subject:'对象'}};
+    let h='<div class="notice">接入的数据先存入本人资料库。用于建议前，需逐条、逐字段单独授权；更正后重新授权，撤回后保留历史但不再作为依据。</div>';
+    h+='<div class="card"><h3>自己开发的应用</h3><p class="meta">真实 HTTP 请求。接口由你提供并负责可达性；下面预填的是内置本地演示服务，不是你的真实应用。最多读取 100 条、512 KiB，只接收 JSON。</p>';
+    h+='<label for="connector-name">应用名称</label><input type="text" id="connector-name" value="'+esc(saved.name)+'">';
+    h+='<label for="connector-base">接口地址（base_url）</label><input type="text" id="connector-base" value="'+esc(saved.base_url)+'">';
+    h+='<label for="connector-path">路径</label><input type="text" id="connector-path" value="'+esc(saved.path)+'">';
+    h+='<p class="meta">字段映射：填写外部 JSON 顶层键名。外部记录另须有稳定 id；对象填本人已有姓名或 person_id，发生日期须为 YYYY-MM-DD。</p><div class="mapping-grid">';
+    for(const local of ['进度','已完成项目','发生日期','对象']){
+      const external=Object.keys(saved.field_map).find(k=>saved.field_map[k]===local)||'';
+      h+='<label>'+esc(local)+' ← 外部键<input type="text" data-map="'+local+'" value="'+esc(external)+'"></label>';
+    }
+    h+='</div><p class="meta">本演示不接收凭证，不明文保存或回显 token。仅支持无需凭证的演示接口；私网与重定向被拒，回环地址仅供本地演示。</p><div class="row"><button class="btn" id="connector-test">试运行</button><button class="btn primary" id="connector-confirm" disabled>确认接入并导入</button></div><div id="connector-preview"></div></div>';
+    h+='<div class="card"><h3>三方开放 API · 模拟数据</h3><p class="meta">以下全部为服务端固定模拟数据，不连接真实学校或外部三方 API。</p>';
+    for(const c of d.catalog){h+='<section class="notice"><strong>'+esc(c.name)+'</strong> <span class="pill">模拟数据</span><p>'+esc(c.description)+'</p><button class="btn" data-sim="'+esc(c.key)+'">连接并同步模拟数据</button></section>';}
+    h+='</div><div class="card"><h3>我的连接器</h3>';
+    if(!d.connectors.length)h+='<p class="empty">还没有连接器，先试运行看看。</p>';
+    for(const c of d.connectors){
+      h+='<section class="notice"><strong>'+esc(c.name)+'</strong><div class="meta">'+(c.kind==='self_app'?'自建应用 · 真实 HTTP':'三方开放 API · 模拟数据')+' · '+(c.revoked?'已撤回':connectorStatus[c.status]||c.status)+'<br>最近同步：'+esc(c.last_sync_at||'尚未同步')+' · 已导入 '+esc(c.imported_count)+' 条</div>';
+      if(c.last_error)h+='<p class="notice bad">'+esc(c.last_error)+'</p>';
+      if(!c.revoked)h+='<div class="row"><button class="btn" data-sync="'+c.connector_id+'">同步</button><button class="btn" data-revoke-connector="'+c.connector_id+'">撤回连接器及导入记录</button></div>';
+      for(const e of c.events){
+        h+='<details class="notice"><summary>'+esc(e.provider)+' · '+esc(e.happened_on)+' · '+esc({active:'有效',revoked:'已撤回',superseded:'已更正'}[e.status]||e.status)+'</summary><p class="meta">来源：'+esc(e.source_id)+'</p>';
+        for(const [k,v] of Object.entries(e.fields))h+='<label>'+esc(k)+'<input type="text" data-edit="'+e.event_id+'" data-field="'+esc(k)+'" value="'+esc(v)+'"></label>';
+        if(e.status==='active'&&!c.revoked){
+          h+='<button class="btn" data-correct="'+e.event_id+'" data-cid="'+c.connector_id+'">更正记录（需重新授权）</button><p>允许用于建议的字段（不等于对外分享）：</p>';
+          for(const k of Object.keys(e.fields))h+='<label class="consent"><input type="checkbox" data-grant="'+e.event_id+'" value="'+esc(k)+'" '+(e.authorized_fields.includes(k)?'checked':'')+'> '+esc(k)+'</label>';
+          h+='<div class="row"><button class="btn primary" data-authorize="'+e.event_id+'" data-cid="'+c.connector_id+'">保存本人所选授权</button><button class="btn" data-ungrant="'+e.event_id+'" data-cid="'+c.connector_id+'">撤回建议授权</button><button class="btn" data-record-revoke="'+e.event_id+'" data-cid="'+c.connector_id+'">撤回这条记录</button></div>';
+        }
+        h+='</details>';
+      }
+      h+='</section>';
+    }
+    out.innerHTML=h+'</div>';
+    async function action(button,fn){button.disabled=true;try{await fn();}catch(e){flash('没有完成：'+e.message,true);}finally{if(button.isConnected)button.disabled=false;}}
+    $('connector-test').onclick=()=>action($('connector-test'),async()=>{
+      const field_map={};for(const el of out.querySelectorAll('[data-map]')){const key=el.value.trim();if(key){if(field_map[key])throw new Error('一个外部键不能映射到多个本地字段');field_map[key]=el.dataset.map;}}
+      connectorDraft={kind:'self_app',name:$('connector-name').value.trim(),base_url:$('connector-base').value.trim(),path:$('connector-path').value.trim(),field_map};
+      const r=await connectorPost('/api/connectors',connectorDraft);draftConnector=r.connector_id;
+      const p=await connectorPost('/api/connectors/'+draftConnector+'/test');$('connector-preview').innerHTML=previewHtml(p);
+      $('connector-confirm').disabled=p.total===0||p.preview.some(r=>!r.importable);flash('试运行完成，尚未导入资料。');
+    });
+    out.querySelectorAll('#connector-name,#connector-base,#connector-path,[data-map]').forEach(el=>el.oninput=()=>{$('connector-confirm').disabled=true;draftConnector='';});
+    $('connector-confirm').onclick=()=>action($('connector-confirm'),async()=>{await connectorPost('/api/connectors/'+draftConnector+'/sync');connectorDraft=null;draftConnector='';await renderConnectors();flash('已导入资料库，尚未授权用于建议。');});
+    out.querySelectorAll('[data-sim]').forEach(b=>b.onclick=()=>action(b,async()=>{const c=d.catalog.find(x=>x.key===b.dataset.sim);const r=await connectorPost('/api/connectors',{kind:'third_party',name:c.name,path:c.key});await connectorPost('/api/connectors/'+r.connector_id+'/sync');await renderConnectors();flash('已同步模拟数据，未发起外部请求，尚未授权用于建议。');}));
+    out.querySelectorAll('[data-sync]').forEach(b=>b.onclick=()=>action(b,async()=>{await connectorPost('/api/connectors/'+b.dataset.sync+'/sync');await renderConnectors();flash('同步完成；重复外部 id 不新增，也不覆盖本人更正。');}));
+    out.querySelectorAll('[data-revoke-connector]').forEach(b=>b.onclick=()=>action(b,async()=>{if(!confirm('撤回此连接器及导入记录？历史保留，但不再用于建议。'))return;await connectorPost('/api/connectors/'+b.dataset.revokeConnector+'/revoke');await renderConnectors();flash('已撤回，历史仍保留。');}));
+    for(const key of ['authorize','ungrant','recordRevoke','correct']){
+      const attr=key.replace(/[A-Z]/g,m=>'-'+m.toLowerCase());out.querySelectorAll('[data-'+attr+']').forEach(b=>b.onclick=()=>action(b,async()=>{
+        const eid=b.dataset[key],base='/api/connectors/'+b.dataset.cid+'/records/'+eid;
+        if(key==='correct'){const payload={};out.querySelectorAll('[data-edit="'+eid+'"]').forEach(e=>payload[e.dataset.field]=e.value);await connectorPost(base+'/correct',{payload});}
+        else if(key==='recordRevoke')await connectorPost(base+'/revoke');
+        else{const fields=key==='ungrant'?[]:[...out.querySelectorAll('[data-grant="'+eid+'"]:checked')].map(e=>e.value);await connectorPost(base+'/authorize',{fields});}
+        await renderConnectors();flash(key==='correct'?'已更正，旧记录保留，新记录需重新授权。':'已保存本人的选择。');
+      }));
+    }
+  }catch(err){out.innerHTML='<div class="notice bad">没读到连接器：'+esc(err.message)+'</div>';}
+}
+
+/* ---------- 视图四：送礼管家（按关系分类的送礼对象档案） ---------- */
+const GIFT_RELATIONSHIPS = ["长辈", "晚辈", "同龄人", "朋友", "同事"];
+const GIFT_CATS = [["preference", "偏好"], ["size", "尺寸"], ["avoid", "忌讳"], ["last_gift", "上次送过什么"]];
+const GIFT_CAT_LABEL = {preference: "偏好", size: "尺寸", avoid: "忌讳", last_gift: "上次送过什么"};
+async function renderGift(){
+  const out0 = $('out');
+  if(out0) out0.innerHTML = '<div class="notice"><b>送礼管家</b>：帮你核对选品、核对偏好、记录常用信息（联系方式、身材信息、兴趣偏好等），也记『上次送过什么』。这些是你的私有档案——不会自动给别人，也不会自动算成已授权用途；要不要用于某一件事、公开哪些字段，始终由你本人逐步确认。</div>';
+
+  const out = $('out');
+  let d;
+  try{ d = await api('/api/gift-targets'); }
+  catch(err){ out.innerHTML = '<div class="notice bad">没读到送礼管家：' + esc(err.message) + '</div>'; return; }
+  const groups = d.groups || {};
+  let h = '<div class="notice">这些是<b>私有档案</b>，记在你名下，<b>不会自动给别人</b>；只有你明确授权的字段，才可能在送礼协商中带给对方。带进对话时会说明依据来自哪几条、还缺什么，缺的据实问、不编造。</div>';
+  h += '<div class="card"><h3>新增到送礼管家</h3>'
+    + '<label for="gift-new-name">称呼（填已有姓名即关联该人物，填新姓名则新建）</label>'
+    + '<input type="text" id="gift-new-name" placeholder="如 爸爸、大姨、老王">'
+    + '<label for="gift-new-rel">关系分类</label><select id="gift-new-rel">'
+    + GIFT_RELATIONSHIPS.map(r => '<option value="' + r + '">' + r + '</option>').join('')
+    + '</select><div class="row"><button class="btn primary" id="gift-create">加入送礼管家</button></div></div>';
+  const order = GIFT_RELATIONSHIPS.concat(Object.keys(groups).filter(k => !GIFT_RELATIONSHIPS.includes(k)));
+  let any = false;
+  for(const rel of order){
+    const list = groups[rel];
+    if(!list || !list.length) continue;
+    any = true;
+    h += '<div class="card"><h3>' + esc(rel) + '</h3>';
+    for(const t of list){
+      const lg = t.last_gift;
+      const cnt = Object.entries(t.entry_counts || {}).filter(([, n]) => n)
+        .map(([c, n]) => (GIFT_CAT_LABEL[c] || c) + ' ' + n).join(' · ');
+      h += '<section class="notice"><strong>' + esc(t.name) + '</strong> <span class="pill">' + esc(rel) + '</span>'
+        + '<div class="meta">档案 ' + esc(t.entry_total) + ' 条' + (cnt ? '（' + esc(cnt) + '）' : '')
+        + '<br>上次送过：' + (lg ? esc(lg.value) + (lg.happened_on ? '（' + esc(lg.happened_on) + '）' : '') : '还没记') + '</div>'
+        + '<div class="row"><select data-entry-cat="' + t.person_id + '">'
+        + GIFT_CATS.map(([c, lab]) => '<option value="' + c + '">' + lab + '</option>').join('')
+        + '</select><input type="text" data-entry-val="' + t.person_id + '" placeholder="内容，如 42 码 / 喜欢软底 / 忌讳送烟酒">'
+        + '<button class="btn" data-add="' + t.person_id + '">加档案</button></div>'
+        + '<div class="row"><button class="btn" data-detail="' + t.person_id + '">查看 / 管理档案条目</button></div>'
+        + '<div id="gift-detail-' + t.person_id + '"></div></section>';
+    }
+    h += '</div>';
+  }
+  if(!any) h += '<p class="empty">送礼管家还是空的，先在上面加入一个人。</p>';
+  out.innerHTML = h;
+  async function action(button, fn){ button.disabled = true; try{ await fn(); }
+    catch(e){ flash('没有完成：' + e.message, true); } finally{ if(button.isConnected) button.disabled = false; } }
+  $('gift-create').onclick = () => action($('gift-create'), async() => {
+    const name = $('gift-new-name').value.trim();
+    const rel = $('gift-new-rel').value;
+    if(!name){ flash('先填一个称呼', true); return; }
+    await post('/api/gift-targets', {name, relationship: rel});
+    flash('已加入送礼管家（私有档案，不会自动给别人）。');
+    await renderGift();
+  });
+  out.querySelectorAll('[data-add]').forEach(b => b.onclick = () => action(b, async() => {
+    const pid = b.dataset.add;
+    const cat = out.querySelector('[data-entry-cat="' + pid + '"]').value;
+    const val = out.querySelector('[data-entry-val="' + pid + '"]').value.trim();
+    if(!val){ flash('档案内容不能为空', true); return; }
+    await post('/api/gift-targets/' + pid + '/entries', {category: cat, value: val});
+    flash('已加档案（私有）。');
+    await renderGift();
+  }));
+  out.querySelectorAll('[data-detail]').forEach(b => b.onclick = () => action(b, async() => {
+    const pid = b.dataset.detail;
+    const box = $('gift-detail-' + pid);
+    const det = await api('/api/gift-targets/' + pid);
+    let h2 = '<div class="sources"><h4>' + esc(det.name) + ' 的档案条目（更正后旧值仅作来源保留，可查）</h4>';
+    if(!det.entries.length) h2 += '<div class="s">（还没有有效档案）</div>';
+    for(const e of det.entries){
+      h2 += '<div class="s">' + esc(GIFT_CAT_LABEL[e.category] || e.category) + '：' + esc(e.value)
+        + '<br><span class="meta">提供者 ' + esc(e.provider || '未标注') + ' · '
+        + esc(e.happened_on || '日期未标注') + '</span></div>'
+        + '<div class="row"><input type="text" data-fix-val="' + e.event_id + '" value="' + esc(e.value) + '">'
+        + '<button class="btn" data-fix="' + e.event_id + '">更正</button>'
+        + '<button class="btn" data-revoke="' + e.event_id + '">撤回</button></div>';
+    }
+    h2 += '</div>';
+    box.innerHTML = h2;
+    box.querySelectorAll('[data-fix]').forEach(btn => btn.onclick = () => action(btn, async() => {
+      const eid = btn.dataset.fix;
+      const v = box.querySelector('[data-fix-val="' + eid + '"]').value.trim();
+      if(!v){ flash('更正内容不能为空', true); return; }
+      await post('/api/gift-targets/entries/' + eid + '/correct', {value: v});
+      flash('已更正，旧值仅作来源保留。');
+      await renderGift();
+    }));
+    box.querySelectorAll('[data-revoke]').forEach(btn => btn.onclick = () => action(btn, async() => {
+      if(!confirm('撤回这条档案？历史仍保留、可查，但不再作为当前值。')) return;
+      await post('/api/gift-targets/entries/' + btn.dataset.revoke + '/revoke', {});
+      flash('已撤回，历史仍保留。');
+      await renderGift();
+    }));
+  }));
+}
+
+/* ---------- 视图五：关系分类（t53 壳体，建设中） ----------
+   只是分类本身：能存、能改。不按它检索、不推荐、不进任何协商提示词，
+   也不影响家庭结构判断。界面必须让人一眼看出这是在建能力。 */
+const REL_CLASS_VALUES = ["亲人", "长辈", "晚辈", "同龄人", "朋友", "工作伙伴", "其他"];
+async function renderRelClass(){
+  const out = $('out');
+  let d;
+  try{ d = await api('/api/social-classes'); }
+  catch(err){ out.innerHTML = '<div class="notice bad">没读到关系分类：' + esc(err.message) + '</div>'; return; }
+  let h = '<div class="notice"><b>建设中</b>：这只是人际关系分类本身，能存能改。'
+    + '它还不驱动检索、推荐或任何协商，也不要据此推断家庭结构。'
+    + '现在还不能按它找人，也没有按它的推荐。</div>';
+  h += '<div class="card"><h3>给人物标分类</h3>'
+    + '<p class="sub">一个人可以有多个分类（既是亲戚又是朋友），也可以不分类。'
+    + '分类只存在你自己的记录里。</p>';
+  const persons = d.persons || [];
+  if(!persons.length){ h += '<p class="empty">还没有可分类的人物。</p>'; }
+  for(const p of persons){
+    const mine = p.classes || [];
+    h += '<div class="row" style="align-items:center;gap:8px;flex-wrap:wrap;margin:8px 0">'
+      + '<span style="min-width:96px">' + esc(p.name) + '</span>';
+    for(const c of REL_CLASS_VALUES){
+      h += '<label style="font-size:12.5px"><input type="checkbox" data-rc-person="' + esc(p.person_id)
+        + '" value="' + c + '"' + (mine.includes(c) ? ' checked' : '') + '> ' + c + '</label> ';
+    }
+    h += '</div>';
+  }
+  h += '<div class="row"><button class="btn primary" id="relclass-save">保存分类</button></div></div>';
+  out.innerHTML = h;
+  $('relclass-save').onclick = () => action($('relclass-save'), async () => {
+    const byPerson = {};
+    out.querySelectorAll('input[data-rc-person]').forEach(cb => {
+      const pid = cb.dataset.rcPerson;
+      if(!byPerson[pid]) byPerson[pid] = [];
+      if(cb.checked) byPerson[pid].push(cb.value);
+    });
+    let n = 0;
+    for(const pid of Object.keys(byPerson)){
+      await post('/api/persons/' + encodeURIComponent(pid) + '/social-class', {classes: byPerson[pid]});
+      n += 1;
+    }
+    flash('已保存 ' + n + ' 人的分类（建设中，暂不驱动任何能力）。');
+    await renderRelClass();
+  });
+}
+
 async function render(){
   if(view === "study") await renderStudy();
+  else if(view === "connectors") await renderConnectors();
+  else if(view === "gift") await renderGift();
+  else if(view === "relclass") await renderRelClass();
   else await renderPlan();
 }
 

@@ -14,15 +14,25 @@
 
   <section id="view-pair" class="cb-view">
     <p class="cb-hint">连接一次就能一直用：重开浏览器、换页面都保持着，
-      不用每次重新配对。只有在个人助理里撤销了这个设备，才需要再连一次。</p>
+      不用每次重新配对。只有在个人助理里撤销了这个设备，才需要再连一次；
+      重置演示资料后也需要重连。</p>
+    <p class="cb-hint">这台电脑加入的是<strong>你本人的助手</strong>：之后你在手机上交办的事，
+      由这台电脑上的插件去执行，回执回到同一件事里。不是手机和插件互相配对，
+      手机也不需要装任何东西。</p>
+    <p class="cb-hint">插件是你在电脑上代替操作页面的那双手：只按你授权的字段代填已批准的商店页面，
+      不提交订单、不付款。</p>
+    <p class="cb-hint"><strong>配对码从哪来</strong>：打开个人助理页面，点右上角「⋯」→ 演示设置 →
+      浏览器插件 → 点「连接浏览器插件」，会生成一个 8 位配对码，回到这个弹窗输入。</p>
     <label class="cb-field">
       <span>配对码</span>
       <input id="pair-code" type="text" autocomplete="off" placeholder="例如 8F3K-2QD1">
     </label>
+    <p class="cb-hint">这个码 5 分钟内有效、只能用一次；连上之后长期有效，码本身会失效。</p>
     <label class="cb-field">
       <span>设备名称</span>
-      <input id="pair-name" type="text" autocomplete="off" placeholder="我的电脑 Chrome">
+      <input id="pair-name" type="text" autocomplete="off" placeholder="例如 我的电脑 Chrome">
     </label>
+    <p class="cb-hint">设备名称是用来在个人助理里认这台电脑、随时撤销它的，可以随便起。</p>
     <button id="btn-pair" class="cb-btn cb-btn-primary">连接</button>
   </section>
 

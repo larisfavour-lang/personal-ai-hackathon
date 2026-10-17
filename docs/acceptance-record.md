@@ -12,7 +12,7 @@
 | t30 新真实聚焦 `75e0359` + `ca65ff1` | 报告 `04ee910`；197.7 秒 exit 0，3 逻辑调用／6 HTTP／0 探针，完整 JSON 与计数已保全 | generic 三方：具体方案、预算口径、重排一致、旧接受失效、当前版重新接受均过；四条注入负验为 stub，不证明产品独立 guest 三家或完整真实 22 项 |
 | t27 新增家庭能力独立验证 | 限定范围通过；20 件／607 断言均 exit 0，另 API 负验 22/22、资料链 12/12 | 来宾新 principal、双浏览器与隔离 DB、本人接受计数、授权来源与撤回剥离分客户端版本；完整插件 Chrome 链未重跑。详见[独立与模型摘要](<delivery/verification-summary.md>) |
 | t31 最终运行实际记录 | 05:28:20 唯一原 manager 更新，PID 58076；本机／LAN 主页面与受邀页 200、served SHA 与源码一致 | 原错误任务 1、全 conversation 8、设备 9、配置 1 的完整行 hash 不变；原表 count 不变，兼容 schema 新增。health 1 逻辑调用，非精确 HTTP 次数或零费用；不替代 Android |
-| 最终演示 | t29 attempt 2 实际 14 阶段通过，3 逻辑／5 HTTP／0 探针；t40 最终后期修正完成，132.8 秒／1280×960／5 fps／无音轨 | v2 新来源实际 used，孩子 1 来 1 待定，guest／发起人本人当前版表态，agreed=false。初报 6 HTTP 按完整 ledger 更正；旧 failed／OCR 错归因撤回与丢日志保留，见[交付说明](<delivery/DELIVERY.md>) |
+| 最终演示 | t29 attempt 2 实际 14 阶段通过，3 逻辑／5 HTTP／0 探针；t40 最终后期修正完成，163.0 秒／1280×960／5 fps／无音轨 | v2 新来源实际 used，孩子 1 来 1 待定，guest／发起人本人当前版表态，agreed=false。初报 6 HTTP 按完整 ledger 更正；旧 failed／OCR 错归因撤回与丢日志保留，见[交付说明](<delivery/DELIVERY.md>) |
 | 安卓实机 | 未执行，转用户本人 | [安卓清单](<delivery/ANDROID-CHECKLIST.md>)。相机、触屏、真麦克风、重开继续、同事项回执待设备操作，桌面与接口不替代 |
 | 服务端 ASR | 不可用，26 次请求与对照核查 | [语音核查摘要](<delivery/verification-summary.md>)；浏览器 SpeechRecognition 只验接线，输入法是系统替代，不算内置 ASR |
 
