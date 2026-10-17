@@ -19,7 +19,7 @@
   D. family_overview 展示语义未改（无关成人仍照实单独列出）；
   E. 既有「未知不造」「不拿配偶凑数」断言仍通过。
 
-运行：/tmp/hack_venv/bin/python tests/test_family_gap_not_filled.py
+运行：python tests/test_family_gap_not_filled.py
 """
 from __future__ import annotations
 
