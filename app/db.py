@@ -675,8 +675,56 @@ class DB:
                     "ALTER TABLE audit_log ADD COLUMN owner_id TEXT NOT NULL DEFAULT ''")
             DB._migrate_receipt_uniqueness(conn)
             DB._migrate_device_lifetime(conn)
+            DB._migrate_gift_relation_pollution(conn)
 
     @staticmethod
+    # t65：送礼管家曾经把关系分类写进 person.relation，家庭结构和侧栏分组跟着错。
+    # 这里做一次性修正：只清**能确证**是送礼标注写入的那些行，拿不准的一条不动，
+    # 跳过的条数写进 audit，后续要复核有据可查。
+    # 「能确证」的三条同时成立：
+    #   1. 这个人的 attributes_json 里有 gift_target（他确实是送礼对象）；
+    #   2. person.relation 现在是 'family'；
+    #   3. relation 表里没有任何一条涉及他的关系——也就是说这个 'family'
+    #      不可能来自任何关系证据，只可能来自送礼标注那一次写入。
+    # 三条缺任何一条都跳过：宁可留下一条错数据，也不把真正的家人改成 other。
+    @staticmethod
+    def _migrate_gift_relation_pollution(conn):
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(person)").fetchall()}
+        if "attributes_json" not in cols:
+            return
+        fixed, skipped = [], 0
+        for row in conn.execute(
+                "SELECT person_id, owner_id, relation, attributes_json FROM person"
+                " WHERE relation='family'").fetchall():
+            try:
+                attrs = json.loads(row["attributes_json"] or "{}")
+            except (ValueError, TypeError):
+                attrs = {}
+            gift = attrs.get("gift_target") if isinstance(attrs, dict) else None
+            if not isinstance(gift, dict):
+                skipped += 1
+                continue
+            ev = conn.execute(
+                "SELECT COUNT(*) AS n FROM relation WHERE owner_id=?"
+                " AND (from_person_id=? OR to_person_id=?)",
+                (row["owner_id"], row["person_id"], row["person_id"])).fetchone()
+            if ev and ev["n"]:
+                # 有关系证据：这个 'family' 可能本来就是真的，不动。
+                skipped += 1
+                continue
+            conn.execute("UPDATE person SET relation='other' WHERE person_id=?",
+                         (row["person_id"],))
+            fixed.append(row["person_id"])
+        if fixed or skipped:
+            conn.execute(
+                "INSERT INTO audit_log(audit_id, task_id, owner_id, actor, action,"
+                " detail_json, created_at) VALUES(?,?,?,?,?,?,?)",
+                (new_id("aud"), "", "", "migration",
+                 "gift_relation_pollution_fixed",
+                 json.dumps({"fixed": fixed, "fixed_count": len(fixed),
+                             "skipped_count": skipped}, ensure_ascii=False),
+                 now_iso()))
+
     def _migrate_device_lifetime(conn):
         """把仍然有效的旧设备凭证改成不设固定到期日。
 
@@ -794,6 +842,11 @@ PERSONS = [
      ' "家长本次要求": "礼物不发声、好收纳", "试穿记录": "上学期某品牌 31 码，现在是否合脚待核实"}'),
     ("p_xiaohan", "A", "小宇", "friend_child", "小周的儿子，小雨的哥哥。", '["小翰"]',
      '{"性别": "男", "年龄": 10, "年级": "小学四年级（2026 秋季）", "已有物品": ["100 片城市拼图"]}'),
+    # A 自己这一方也要有孩子：否则「学习软件」这类按孩子看的页面，
+    # 默认只能列出朋友家的孩子和长辈，不像一个家庭主人打开的样子。
+    ("p_xiaoman_a", "A", "小满", "own_child", "我的女儿，6 岁。", '["满满"]',
+     '{"性别": "女", "年龄": 6, "年级": "小学一年级（2026 秋季）", "身高": "118 cm",'
+     ' "已有物品": ["36 色蜡笔"], "家长本次要求": "礼物不安全材质不要"}'),
     ("p_azhou_b", "B", "我", "self", "小周本人。", '[]',
      '{"职业": "建筑设计师", "城市": "上海"}'),
     ("p_xiaolin_b", "B", "小林", "spouse", "我的配偶，小学教师。", '[]',
@@ -819,6 +872,11 @@ PERSONS = [
 # 关系：谁 → 什么关系 → 谁。职业不进这里，关系起止与来源保留。
 RELATIONS = [
     ("r_me_azhou", "A", "p_me", "朋友", "p_azhou", "我以前的朋友", "小周是我以前的朋友", "2026-10-01"),
+    # A 侧自己的孩子也要有关系记录：只有 person.relation='own_child' 而 relation 表
+    # 里没有对应行时，family_overview 会把这个孩子当成「没有家长记录的孩子」
+    # 单列成「未定家庭」——那既让家庭数多出一个，也让「说了 3 家只认出 2 家」
+    # 的缺口算成 0。关系是家庭结构的唯一证据，person.relation 只是标签。
+    ("r_me_xiaoman", "A", "p_me", "父亲", "p_xiaoman_a", "小满的父亲", "小满是我的女儿", "2026-10-01"),
     ("r_me_xiaolin", "A", "p_me", "朋友", "p_xiaolin", "通过小周认识", "我通过小周认识小林", "2026-10-01"),
     ("r_azhou_xiaoyu", "A", "p_azhou", "父亲", "p_xiaoyu", "小雨的父亲", "小周是雨的父亲", "2026-10-01"),
     ("r_azhou_xiaohan", "A", "p_azhou", "父亲", "p_xiaohan", "小宇的父亲", "小周是雨的父亲", "2026-10-01"),

@@ -204,6 +204,21 @@ function sourceText(source, eventType){
   return EVENT_TEXT[eventType] || "已授权的记录";
 }
 
+/* 按给定名单渲染人选。默认就是看全部，点某个孩子是收窄，不是进门门槛。 */
+function personChipsFor(list){
+  if(!list || !list.length){
+    return '<div class="notice">还没有可记录的人物。</div>';
+  }
+  let h = '<div class="row">';
+  h += '<button class="chip" data-pick="" aria-pressed="' + (!picked) + '">全部</button>';
+  for(const p of list){
+    h += '<button class="chip" data-pick="' + esc(p.person_id) + '" aria-pressed="'
+       + (p.person_id === picked) + '">' + esc(p.name) + '</button>';
+  }
+  h += '</div>';
+  return h;
+}
+
 function personChips(){
   if(!myPersons.length){
     return '<div class="notice">还没有可记录的人物。</div>';
@@ -307,7 +322,22 @@ async function renderStudy(){
   /* 不设「先选一个对象」这道门。一般家庭就一两个孩子，为了看记录专门去点
      一下人选是多出来的一步；老师带一个班时人也照样分组列着，不会糊成一片。
      选人在这里只是筛选：点某个孩子只看他，再点一次取消筛选回到全部。 */
-  const few = myPersons.length > 0;
+  // 人物只列自己的孩子。原来把朋友家的孩子、配偶、长辈一起列出来，
+  // 一个家庭主人打开「学习软件」看到的是别人家孩子，不像在记自己家的进度。
+  // 一个自己的孩子都没有时，退回所有孩子；再没有才退回全部人物，
+  // 并且把为什么退回落进界面，不悄悄换一批人。
+  const OWN_CHILD = ["own_child", "child", "son", "daughter"];
+  let persons = myPersons.filter((p) => OWN_CHILD.includes(p.relation));
+  let personNote = "";
+  if(!persons.length){
+    persons = myPersons.filter((p) => p.relation && p.relation.indexOf("child") >= 0);
+    if(persons.length) personNote = "你还没有把自己的孩子记在名下，先按所有孩子列。";
+  }
+  if(!persons.length){
+    persons = myPersons;
+    if(persons.length) personNote = "还没有孩子记录，先按所有人物列。";
+  }
+  const few = persons.length > 0;
   if(!few){
     out.innerHTML = '<div class="empty">还没有可记录的人物。</div>';
     return;
@@ -320,7 +350,7 @@ async function renderStudy(){
     evs = few ? all.slice() : all.filter((e) => e.subject_id === picked);
     if(few){
       const order = {};
-      myPersons.forEach((p, i) => { order[p.person_id] = i; });
+      persons.forEach((p, i) => { order[p.person_id] = i; });
       evs.sort((a, b) => (order[a.subject_id] - order[b.subject_id])
         || String(b.happened_on || "").localeCompare(String(a.happened_on || "")));
     }
@@ -330,7 +360,8 @@ async function renderStudy(){
   }
   let h = '<div class="card"><h3>记一条进度</h3>'
     + '<div class="meta">默认记在第一个孩子名下；要记给别人，先点上面的人名。保存前你可以改。</div>'
-    + personChips()
+    + (personNote ? '<div class="notice">' + esc(personNote) + '</div>' : '')
+    + personChipsFor(persons)
     + '<label for="ta-dim">哪条线（学习维度）</label><select id="ta-dim">'
     + STUDY_DIMS.map(d => '<option value="' + d + '">' + d + '</option>').join('')
     + '</select>'
@@ -372,7 +403,7 @@ async function renderStudy(){
     h += '<div class="empty">' + (picked ? '这个人还没有记录。' : '还没有记录。') + '</div>';
   }
   const nameOf = (id) => {
-    const hit = myPersons.find((p) => p.person_id === id);
+    const hit = persons.find((p) => p.person_id === id);
     return hit ? hit.name : "";
   };
   for(const ev of evs){
@@ -489,11 +520,62 @@ async function renderPlan(){
     out.innerHTML = '<div class="empty">还没有可给出建议的对象。</div>';
     return;
   }
-  out.innerHTML = '<div class="card"><h3>下一步建议</h3>'
+  /* 先看这周末和谁有关、各自到什么程度，再谈建议。
+     原来一进来就是「下一步建议 + 选人 + 给一条建议」，像在要答案；
+     实际上要先回答三件事：谁周末有空、谁的日程已经定了、我邀请了谁/谁邀请了我。
+     这三件事有数据支撑（plan 的参与方状态、条件、在等谁），
+     没有支撑的（比如对方具体哪个小时有空）就明说还没记，不猜。 */
+  let plans = [];
+  try{ plans = (await api('/api/plans')) || []; }catch(err){ plans = []; }
+  let h = '';
+  if(plans.length){
+    h += '<div class="card"><h3>这周末和谁有关</h3>'
+      + '<p class="meta">按当前版本看。谁给了条件、谁还没给，谁表了态、在等谁，都列在这里。</p>';
+    for(const p of plans){
+      h += '<section class="notice"><strong>' + esc(p.title || '共同事项') + '</strong>';
+      if(p.needs_replan) h += ' <span class="pill">待重排</span>';
+      else if(p.agreed) h += ' <span class="pill">已约定</span>';
+      else h += ' <span class="pill">还没约定</span>';
+      h += '<div class="meta">当前第 ' + esc(p.current_version || 0) + ' 版'
+        + (p.utterance ? ' · 原话：' + esc(p.utterance) : '') + '</div>';
+      // 每家一行：状态 + 他给的时间条件。没给条件就说没给，不拿别人的顶。
+      for(const s of (p.participants || [])){
+        const stateText = {pending: '还没给条件', invited: '已邀请未接',
+          claimed: '已自称未认可', approved: '已认可未表态',
+          reviewed: '代表已审阅', accepted: '本人已接受',
+          rejected: '本人不接受', retired: '已退出'}[s.state] || s.state;
+        h += '<div class="meta" style="margin-top:6px">'
+          + '<span class="pill" style="margin-right:6px">' + esc(s.label || '') + '</span>'
+          + esc(stateText)
+          + (s.required ? '' : '（非必到）') + '</div>';
+      }
+      if(p.waiting_on && p.waiting_on.length){
+        h += '<div class="meta" style="margin-top:6px">还在等：'
+          + esc(p.waiting_on.join('、')) + '。</div>';
+      }else if(!p.agreed){
+        h += '<div class="meta" style="margin-top:6px">条件都齐了，还没到全员约定。</div>';
+      }
+      h += '<div class="row"><button class="btn" data-open-plan="' + esc(p.plan_id) + '">打开这件事</button></div>';
+      h += '</section>';
+    }
+    h += '</div>';
+  }else{
+    h += '<div class="card"><h3>这周末和谁有关</h3>'
+      + '<div class="empty">还没有共同事项。说一句「周末三家一起带孩子出去玩，我出100以内」就能开一件。</div></div>';
+  }
+  // 建议降成次要动作：它只依据已授权给你的近况，不是这里的主角。
+  // 两张卡必须先拼进同一个 h、再一次性赋值。原来先赋一次状态卡、
+  // 之后又 out.innerHTML += h，等于把已经渲染过的状态卡又追加一遍，
+  // 用户看到两张一模一样的「这周末和谁有关」。
+  h += '<div class="card"><h3>下一步建议</h3>'
     + '<div class="meta">只依据已授权给你的近况，不重填人物背景。</div>'
     + personChips()
-    + '<div class="row"><button class="btn primary" id="btn-ask">给一条建议</button></div>'
+    + '<div class="row"><button class="btn" id="btn-ask">给一条建议</button></div>'
     + '<div id="plan-result"></div></div>';
+  out.innerHTML = h;
+  out.querySelectorAll('[data-open-plan]').forEach((b) => {
+    b.addEventListener("click", () => { if(window.openPlan) openPlan(b.dataset.openPlan); });
+  });
   out.querySelectorAll("[data-pick]").forEach((b) => {
     b.addEventListener("click", () => { picked = b.dataset.pick; renderPlan(); });
   });

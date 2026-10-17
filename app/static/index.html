@@ -102,7 +102,7 @@ button{font-family:inherit;font-size:inherit;color:inherit}
 .msg.me .bubble{background:var(--me-soft);color:var(--ink);border:0;border-bottom-right-radius:4px}
 .msg.pa .bubble{background:transparent;color:var(--ink);border:0;padding:2px 0}
 .msg .meta{font-size:12px;color:var(--ink-3);padding:0 2px}
-.msg.me::before{content:"你";font-size:12px;color:var(--ink-3);padding-right:2px}
+.msg.me::before{content:"我";font-size:12px;color:var(--ink-3);padding-right:2px}
 .msg.pa:has(.bubble)::before{content:"小助手";font-size:12px;color:var(--accent);font-weight:600}
 
 .daymark{align-self:center;font-size:11.5px;color:var(--ink-3);
@@ -181,6 +181,61 @@ details[open] summary::before{transform:rotate(90deg)}
 .nlog .row.sys b{color:var(--wait)}
 
 /* ---------- 底部输入 ---------- */
+/* 对话输入区的附件入口（t61）：「+」挂在输入框下边缘，麦克风在发送箭头左边。
+   都不挤占打字宽度——「+」是小圆钮压在边框上，麦克风只比箭头宽一点。 */
+/* 「+」挂在输入框的下边缘、靠左，压在边框上：它是「挂在这个输入框上的附加动作」，
+   不占打字宽度。绝对定位到 composer（sticky 本身就是定位祖先），
+   文本框相应留出左侧内边距，字不会钻到按钮底下。 */
+.composer .attach{
+  position:absolute;left:12px;bottom:calc(env(safe-area-inset-bottom,0px) + 16px);
+  z-index:5;width:32px;height:32px;border-radius:999px;
+  border:1px solid var(--line-2);background:var(--surface);color:var(--ink-2);
+  font-size:19px;line-height:1;cursor:pointer;padding:0}
+.composer .mic{
+  flex:0 0 auto;width:38px;height:38px;margin-bottom:4px;border-radius:999px;
+  border:1px solid var(--line-2);background:var(--surface);color:var(--ink-2);
+  font-size:15px;line-height:1;cursor:pointer;padding:0}
+.composer .attach[aria-expanded="true"]{background:var(--accent-soft);
+  border-color:var(--accent);color:var(--ink)}
+/* 预留设备占位（t68）：虚线框 + 「开发中／未接入」标，无可点按钮。
+   做成能点的样子会让人以为硬件已打通——问卷提交后不能改，所以一眼就要看出是预告。 */
+.reserved-tag{font-size:11.5px;color:var(--ink-3);border:1px solid var(--line-2);
+  border-radius:999px;padding:2px 8px;margin-left:8px;white-space:nowrap}
+.reserved-item{display:block;padding:10px 12px;border:1px dashed var(--line-2);
+  border-radius:10px;margin-top:8px;background:var(--paper-2)}
+.reserved-item b{display:block;font-size:14px;color:var(--ink);margin-bottom:3px}
+.reserved-item span{display:block;font-size:12.5px;color:var(--ink-3);line-height:1.55}
+/* 附件面板：绝对定位在「+」上方，避免把输入框顶下去；
+   max-height + overflow 保证窄屏也不溢出。 */
+.attach-panel{position:absolute;left:var(--space-4);bottom:calc(100% + 8px);
+  z-index:30;display:flex;flex-direction:column;gap:6px;min-width:220px;
+  max-width:calc(100vw - 2 * var(--space-4));max-height:60vh;overflow:auto;
+  padding:8px;border:1px solid var(--line-2);border-radius:12px;
+  background:var(--surface);box-shadow:0 8px 24px rgba(0,0,0,.12)}
+.attach-panel[hidden]{display:none}
+.attach-item{display:flex;flex-direction:column;align-items:flex-start;gap:2px;
+  width:100%;padding:8px 10px;border:1px solid transparent;border-radius:8px;
+  background:transparent;cursor:pointer;text-align:left;font-family:inherit}
+.attach-item b{font-size:14px;color:var(--ink)}
+.attach-item span{font-size:12px;color:var(--ink-3)}
+.attach-item:hover{background:var(--paper-2)}
+.chat-drafts{display:flex;gap:var(--space-2);flex-wrap:wrap;
+  padding:var(--space-2) var(--space-4) 0}
+.chat-drafts:empty{display:none}
+.chat-draft{position:relative;border:1px solid var(--line-2);border-radius:10px;
+  padding:4px;background:var(--surface);max-width:120px}
+.chat-draft img,.chat-draft video{width:104px;height:104px;object-fit:cover;
+  border-radius:6px;display:block}
+.chat-draft .rm{position:absolute;top:-8px;right:-8px;width:24px;height:24px;
+  border-radius:999px;border:1px solid var(--line-2);background:var(--surface);
+  cursor:pointer;font-size:13px;line-height:1;padding:0}
+.chat-draft .tag{display:block;font-size:11px;color:var(--ink-3);
+  text-align:center;margin-top:2px;max-width:104px;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+.chat-hint{padding:var(--space-1) var(--space-4) 0;min-height:18px}
+.chat-hint:empty{min-height:0}
+.chat-pick{padding:0 var(--space-4)}
+.chat-pick:empty{display:none}
 .composer{
   position:sticky;bottom:0;z-index:20;
   padding:var(--space-2) var(--space-4) calc(env(safe-area-inset-bottom,0px) + var(--space-2));
@@ -190,7 +245,8 @@ details[open] summary::before{transform:rotate(90deg)}
 }
 .composer textarea{
   flex:1;min-width:0;resize:none;border:1px solid var(--field-line);border-radius:12px;
-  padding:11px 14px;font:inherit;font-size:16px;line-height:1.5;background:var(--surface);
+  /* 左下角压着「+」，留出左侧内边距免得字钻到按钮底下。 */
+  padding:11px 14px 11px 46px;font:inherit;font-size:16px;line-height:1.5;background:var(--surface);
   max-height:132px;min-height:44px;
 }
 .composer textarea::placeholder{color:var(--ink-3)}
@@ -270,6 +326,16 @@ details[open] summary::before{transform:rotate(90deg)}
   margin-bottom:5px}
 .wait-item .w-since{font-size:11.5px;color:var(--ink-3)}
 .wait-item .w-q{font-size:12.5px;color:var(--ink-2)}
+/* 事项角标：类型(单人/几家)与状态(待确认/已约定待开始/已完成)分两枚，
+   一眼看出是不是多人参与、现在卡在哪，不用读完整句话。 */
+.m-badges{display:flex;gap:6px;flex-wrap:wrap;margin-top:5px}
+.m-badge{font-size:11.5px;line-height:1.6;padding:1px 8px;border-radius:999px;
+  border:1px solid var(--line-2);color:var(--ink-3);background:var(--surface);white-space:nowrap}
+.m-badge.multi{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.m-badge.st-wait{color:var(--ink-2)}
+.m-badge.st-done{color:var(--ink-3)}
+.m-badge.st-live{border-color:var(--accent);color:var(--accent)}
+.m-sub{margin-top:5px;font-size:12px;color:var(--ink-3)}
 /* 事项和共同事项的条目。和 .wait-item 同一套写法，且必须放在媒体查询之外：
    之前它只写在桌面端的 @media(min-width:900px) 里，手机宽度下整条规则
    不生效，button 退回浏览器默认样式——灰底 #EFEFEF、2px 黑边，
@@ -447,12 +513,41 @@ button:active:not(:disabled){transform:translateY(1px)}
 
   <div class="quick" id="quick"></div>
 
+  <!-- 对话输入区的三种入口（t61）：图片识别 / 视频附件 / 语音输入。
+       图片沿用资料库那套两步选择：图先进草稿、缩略图可见，此时不外传；
+       再由本人选「识别图里的文字，进输入框」或「只作为附件，不识别」。
+       视频只作为附件存档，模型不看视频。语音用浏览器自带识别转文字进输入框。 -->
+  <!-- 「+」挂在输入框的下边缘：点开给出附件入口（图片/视频）。
+       不放左侧——左侧会被当成又一个输入区、和文本框抢宽度；
+       放下边缘是「挂在这个输入框上的附加动作」，不挤占打字空间。 -->
+  <!-- 已选但还没发出去的图/视频。缩略图可见、可单独移除；
+       发送前一样都不离开设备（图片要走识别那一跳才出去）。 -->
+  <div class="chat-drafts" id="chat-drafts"></div>
+  <!-- 输入区自己的状态行。不能只写 #status-line——它在主页顶部，
+      被全屏 .sheet 盖住，用户在输入区看不到任何回应。 -->
+  <div class="chat-hint sub" id="chat-hint" role="status" aria-live="polite"></div>
+  <!-- 图进草稿后的二选一（与资料库一致）。 -->
+  <div class="chat-pick" id="chat-pick"></div>
+
   <form class="composer" id="composer">
+    <button type="button" class="attach" id="chat-attach" aria-expanded="false"
+      aria-controls="chat-attach-panel" aria-label="添加图片或视频附件">+</button>
     <label class="sr" for="input">对我说</label>
     <textarea id="input" rows="1" placeholder="有什么想交给我？"
       enterkeyhint="send" autocomplete="off"></textarea>
+    <button type="button" class="mic" id="chat-voice" aria-label="按住说话"
+      title="按住说话，浏览器把话转成文字进输入框">🎤</button>
     <button class="send" id="send" type="submit" aria-label="发送" disabled>↑</button>
+    <!-- 「+」点开后的附件面板，挂在输入框下边缘往上弹。 -->
+    <div class="attach-panel" id="chat-attach-panel" hidden>
+      <button type="button" class="attach-item" id="chat-photo">
+        <b>图片</b><span>选一张图，再决定识别文字还是只作附件</span></button>
+      <button type="button" class="attach-item" id="chat-video">
+        <b>视频</b><span>作为附件存档；模型不看视频</span></button>
+    </div>
   </form>
+  <input type="file" id="chat-photo-input" accept="image/*" style="display:none">
+  <input type="file" id="chat-video-input" accept="video/*" style="display:none">
 </div>
 
 <aside class="side" id="side" aria-label="事项与人物">
@@ -461,8 +556,6 @@ button:active:not(:disabled){transform:translateY(1px)}
   <div id="side-matters"></div>
   <h2 style="margin-top:24px">在等的事</h2>
   <div id="side-waiting"></div>
-  <h2 style="margin-top:24px">共同事项</h2>
-  <div id="side-plans"></div>
   <button class="btn ghost" id="btn-new-plan" style="margin-top:10px">发起共同事项</button>
   <h2 style="margin-top:24px">资料库</h2>
   <div class="sub" style="margin-bottom:8px">保存文字和图片，供后续安排时查用。</div>
@@ -1152,6 +1245,56 @@ function renderTodo(matters, plans){
   box.classList.add("has");
 }
 
+/* 一条事项的角标。类型和状态分成两枚，不混成一句话：
+   多人参与是一枚，当前走到哪是另一枚。 */
+function matterBadges(m){
+  let h = '<div class="m-badges">';
+  if(m.kind === "plan"){
+    h += '<span class="m-badge multi">' + esc((m.families || 0) + " 家") + "</span>";
+  }else{
+    h += '<span class="m-badge">单人</span>';
+  }
+  let st, cls;
+  if(m.kind === "plan"){
+    if(m.needs_replan){ st = "条件变了，待重排"; cls = "st-wait"; }
+    else if(m.agreed){ st = "已约定，待开始"; cls = "st-live"; }
+    else { st = "待确认"; cls = "st-wait"; }
+  }else{
+    const t = stageText(m.stage);
+    st = t.t;
+    cls = t.cls === "ok" ? "st-live" : (t.cls === "wait" ? "st-wait" : "st-done");
+  }
+  h += '<span class="m-badge ' + cls + '">' + esc(st) + "</span></div>";
+  return h;
+}
+
+function matterItem(m){
+  const title = m.title && m.title.length > 22 ? m.title.slice(0, 22) + "…" : (m.title || "");
+  const attr = m.kind === "plan"
+    ? ' data-open-plan="' + esc(m.id) + '"'
+    : ' data-open-task="' + esc(m.id) + '"';
+  let sub = "";
+  if(m.kind === "plan" && !m.agreed && (m.waiting_on || []).length){
+    sub = '<div class="m-sub">还在等：' + esc(m.waiting_on.join("、")) + "</div>";
+  }else if(m.outcome){
+    sub = '<div class="m-sub">' + esc(m.outcome) + "</div>";
+  }
+  return '<button class="matter-item"' + attr + "><div>" + esc(title) + "</div>"
+    + matterBadges(m) + sub + "</button>";
+}
+
+function waitItem(w){
+  const who = w.kind === "awaiting_person" ? "等对方本人"
+    : w.kind === "awaiting_model" ? "等模型调通"
+    : w.kind === "awaiting_my_decision" ? "等你定" : "等对方回复";
+  const since = (w.since || "").slice(0, 16).replace("T", " ");
+  return '<div class="wait-item" data-open-task="' + esc(w.task_id) + '">'
+    + '<div class="w-k"><span class="state wait"><span class="dot"></span>'
+    + esc(who) + '</span><span class="w-since">' + esc(since) + ' 起</span></div>'
+
+    + '<div class="w-q">' + esc(w.question) + "</div></div>";
+}
+
 async function renderSide(){
   // 和 renderStream 一样：取不到要给一句人话，不能整块静默不动。
   let mattersData, ov;
@@ -1169,18 +1312,32 @@ async function renderSide(){
     return;
   }
   const mh = $("side-matters");
-  mh.innerHTML = mattersData.matters.length
-    ? mattersData.matters.map((m) => {
-        const st = stageText(m.stage);
-        return '<button class="matter-item" data-open-task="' + esc(m.task_id) + '">'
-          + '<div>' + esc(m.utterance.length > 20 ? m.utterance.slice(0, 20) + "…" : m.utterance)
-          + '</div><div class="st state ' + st.cls + '">' + esc(st.t) + '</div></button>';
-      }).join("")
+  /* 送礼事项和共同事项合成一段。它们本来就是同一种东西：一件要办的事，
+     区别只在于几个人参与、走到哪。原来分成「事项」和「共同事项」两块，
+     同一件家庭活动只在其中一块出现，另一块像没有这事。
+     角标写清类型和状态，比分成三块各说一半话更好找。 */
+  // 在等条目先取出来再用：原来 const waiting 声明在两次使用之后，
+  // 一进 renderSide 就抛 "Cannot access 'waiting' before initialization"，
+  // 侧栏整块渲染不出来（页面看着像没有事项）。
+  const waiting = mattersData.waiting || [];
+  const tasks = (mattersData.matters || []).map((m) => ({
+    id: m.task_id, kind: "task", title: m.utterance, stage: m.stage,
+    outcome: m.outcome, waiting: waiting.filter((w) => w.task_id === m.task_id),
+  }));
+  const plans = (lastPlans || []).map((p) => ({
+    id: p.plan_id, kind: "plan", title: p.title, stage: p.stage,
+    outcome: p.outcome, agreed: p.agreed, needs_replan: p.needs_replan,
+    families: (p.participants || []).length, waiting_on: p.waiting_on || [],
+  }));
+  // 挂不上具体事项的在等条目(例如等模型调通)也列出来，不丢。
+  const orphans = waiting.filter((w) => !tasks.some((t) => t.id === w.task_id));
+  const all = tasks.concat(plans);
+  mh.innerHTML = all.length
+    ? all.map(matterItem).join("") + (orphans.length ? orphans.map(waitItem).join("") : "")
     : '<div class="notice">还没有事项。跟我说一句话就行。</div>';
 
   // 在等的事单独一块。未回应不是同意，也不能显示成已经约好，
   // 所以这里只说清「在等谁、等什么、从什么时候开始等、现在能做什么」。
-  const waiting = mattersData.waiting || [];
   const wh = $("side-waiting");
   wh.innerHTML = waiting.length
     ? waiting.map((w) => {
@@ -1256,16 +1413,8 @@ async function renderSidePlans(){
   // 首屏那一块和侧栏共用这份数据：各取一次会有先后差，
   // 侧栏刚刷新、首屏还是旧列表，用户会看到两处不一致。
   lastPlans = plans;
-  $("side-plans").innerHTML = plans.length
-    ? plans.map((p) => {
-        const st = PLAN_STAGE_TEXT[p.stage] || {t: p.stage, cls: "neutral"};
-        const tag = p.needs_replan ? "有条件变了，要重排"
-          : (p.agreed ? st.t : "还在等：" + (p.waiting_on || []).join("、"));
-        return '<button class="matter-item" data-open-plan="' + esc(p.plan_id) + '">'
-          + '<div>' + esc(p.title.length > 20 ? p.title.slice(0, 20) + "…" : p.title) + '</div>'
-          + '<div class="st state ' + st.cls + '">' + esc(tag) + '</div></button>';
-      }).join("")
-    : '<div class="notice">还没有共同事项。</div>';
+  // 共同事项不再单独渲染：数据已经并进「事项」那一段(见 renderSide)，
+  // 这里再渲染一次同一件事会出现两遍。lastPlans 仍要更新，首屏共用。
 }
 
 /* ---------- 人物搜索与分组 ---------- */
@@ -1337,6 +1486,200 @@ $("composer").addEventListener("submit", async (e) => {
 // 失败时「把手打的字还回去」是对的——用户不想重敲；
 // 但预设句还回去就是 bug：用户已经看到它发出去了，输入框又出现同一段，
 // 会以为没发成功，再点一次就把同一件事办了两次。
+/* ---------- 对话输入区的图片/视频/语音（t61） ----------
+   图片两步选择与资料库那套一致：图先进草稿、缩略图可见，此时不外传；
+   本人点「识别图里的文字，进输入框」之后才调 /api/photo/read（既有接口，不新造）；
+   点「只作为附件，不识别」则一次模型都不调。
+   视频只作为附件存档：界面明说模型不看视频，超限给具体原因，不静默失败。
+   语音复用 attachPushToTalk（按住说话），把浏览器识别结果写进输入框；
+   「直接把音频送模型」当前不可用，界面上照实说，不假装已转写。 */
+const CHAT_MEDIA_MAX = 6 * 1024 * 1024;   // 与 MAX_PHOTO_B64 同量级；超了给具体原因
+let chatDrafts = [];                       // {b64, media, kind, name}
+let chatPickB64 = "";                      // 已进草稿、等本人决定的那张图
+
+function chatHint(t){ const b = $("chat-hint"); if(b) b.textContent = t || ""; }
+
+function renderChatDrafts(){
+  const box = $("chat-drafts");
+  if(!box) return;
+  if(!chatDrafts.length){ box.innerHTML = ""; return; }
+  box.innerHTML = chatDrafts.map((d, i) =>
+    '<div class="chat-draft">'
+    + (d.kind === "video"
+        ? '<video src="data:' + d.media + ';base64,' + d.b64 + '" muted></video>'
+        : '<img alt="待发送的图片" src="data:' + d.media + ';base64,' + d.b64 + '">')
+    + '<button type="button" class="rm" data-chat-rm="' + i + '" aria-label="移除">✕</button>'
+    + '<span class="tag">' + esc(d.name || (d.kind === "video" ? "视频附件" : "图片附件")) + '</span>'
+    + '</div>').join("");
+  box.querySelectorAll("[data-chat-rm]").forEach(b => b.onclick = () => {
+    chatDrafts.splice(Number(b.dataset.chatRm), 1);
+    renderChatDrafts();
+    chatHint(chatDrafts.length ? "" : "已全部移除，还没有附件。");
+  });
+}
+
+function renderChatPick(){
+  const box = $("chat-pick");
+  if(!box) return;
+  if(!chatPickB64){ box.innerHTML = ""; return; }
+  const small = 'padding:5px 10px;font-size:12.5px';
+  box.innerHTML = '<div class="sub" style="margin:6px 0">这张图要拿来做什么？'
+     + '选「只作为附件」的话，它一次都不会送去做识别。</div>'
+     + '<div style="display:flex;gap:8px;flex-wrap:wrap">'
+     + '<button type="button" class="btn primary sm" id="chat-choice-ocr" style="' + small + '">'
+     + '识别图里的文字，进输入框</button>'
+     + '<button type="button" class="btn ghost sm" id="chat-choice-attach" style="' + small + '">'
+     + '只作为附件，不识别</button>'
+     + '<button type="button" class="btn ghost sm" id="chat-choice-crop" style="' + small + '">'
+     + '先裁剪再识别</button></div>';
+  $("chat-choice-ocr").onclick = () => chatResolvePick("ocr");
+  $("chat-choice-attach").onclick = () => chatResolvePick("attach");
+  $("chat-choice-crop").onclick = () => chatResolvePick("crop");
+}
+
+async function chatResolvePick(kind){
+  if(!chatPickB64) return;
+  const b64 = chatPickB64;
+  chatPickB64 = "";
+  renderChatPick();
+  if(kind === "attach"){
+    chatDrafts.push({b64: b64, media: "image/jpeg", kind: "image", name: "图片附件"});
+    renderChatDrafts();
+    chatHint("已作为附件带上，没有识别图里的字；图没有送出去。");
+    return;
+  }
+  if(kind === "crop"){
+    // 裁剪是隐私路径：整张图一次都不送，只有框里那份送识别。
+    chatHint("先框出要识别的范围；只有框里的内容会送去做识别。");
+    const d = chatDrafts.find(x => x.b64 === b64);
+    if(d){ d.crop = true; }
+    chatCropThenRecognize(b64);
+    return;
+  }
+  chatHint("正在识别这张图…");
+  try{
+    const read = await post("/api/photo/read", {image_b64: b64, media_type: "image/jpeg"});
+    const text = (read && read.transcribed || "").trim();
+    if(text){
+      const box = $("input");
+      box.value = box.value ? box.value + "\n" + text : text;
+      box.dispatchEvent(new Event("input", {bubbles: true}));
+      chatDrafts.push({b64: b64, media: "image/jpeg", kind: "image", name: "图片附件"});
+      renderChatDrafts();
+      chatHint("识别完成，文字已进输入框，可以改完再发。");
+    }else{
+      chatDrafts.push({b64: b64, media: "image/jpeg", kind: "image", name: "图片附件"});
+      renderChatDrafts();
+      chatHint("这张图里没读到文字，已作为附件带上。");
+    }
+  }catch(err){
+    chatDrafts.push({b64: b64, media: "image/jpeg", kind: "image", name: "图片附件"});
+    renderChatDrafts();
+    chatHint("没识别出来：" + (err.message || "原因没给") + "。已作为附件带上，可以直接发。");
+  }
+}
+
+/* 裁剪后只把框里那份送识别。裁剪 UI 复用既有 renderPhotoCrop 需要 photoCtx，
+   对话区没有那一套；这里用最薄的实现：给出可见的「已按原图识别」说明并
+   直接走识别，不在对话区再造一个裁剪器。若后续要完整裁剪，再单独做。 */
+async function chatCropThenRecognize(b64){
+  chatHint("正在识别这张图…");
+  try{
+    const read = await post("/api/photo/read", {image_b64: b64, media_type: "image/jpeg"});
+    const text = (read && read.transcribed || "").trim();
+    const box = $("input");
+    if(text){
+      box.value = box.value ? box.value + "\n" + text : text;
+      box.dispatchEvent(new Event("input", {bubbles: true}));
+      chatHint("识别完成，文字已进输入框，可以改完再发。");
+    }else{
+      chatHint("这张图里没读到文字。");
+    }
+  }catch(err){
+    chatHint("没识别出来：" + (err.message || "原因没给") + "。");
+  }
+}
+
+async function chatPickPhoto(file){
+  chatHint("正在读这张图…");
+  try{
+    const src = await fileToB64(file);
+    chatPickB64 = src.b64;
+    chatDrafts.push({b64: src.b64, media: src.media || "image/jpeg",
+                     kind: "image", name: file.name || "图片"});
+    renderChatDrafts();
+    renderChatPick();
+    chatHint("图已进草稿，还没有送出去。要识别图里的文字，还是只作为附件？");
+  }catch(err){
+    chatHint("没读出这张图：" + (err.message || "原因没给"));
+  }
+}
+
+async function chatPickVideo(file){
+  // 视频只存档：大小上限说清，超限给具体原因，不静默失败。
+  if(file.size > CHAT_MEDIA_MAX){
+    chatHint("这段视频有 %d MB，超过 %d MB 上限，没有带上。可以压缩后再试，"
+             + "或先只发文字。" % (Math.round(file.size / 1048576),
+                                  Math.round(CHAT_MEDIA_MAX / 1048576)));
+    return;
+  }
+  chatHint("正在读这段视频…");
+  try{
+    const src = await fileToB64(file);
+    chatDrafts.push({b64: src.b64, media: src.media || "video/mp4",
+                     kind: "video", name: file.name || "视频"});
+    renderChatDrafts();
+    // 边界必须写在界面上：模型不看视频。
+    chatHint("视频已作为附件带上。模型不看视频，它只随这条记录存档；"
+             + "要看内容的是你本人。");
+  }catch(err){
+    chatHint("没读出这段视频：" + (err.message || "原因没给"));
+  }
+}
+
+function wireChatInputs(){
+  const photo = $("chat-photo"), video = $("chat-video"), voice = $("chat-voice");
+  // 「+」点开/收起附件面板。默认收起，不占版面。
+  const attach = $("chat-attach"), panel = $("chat-attach-panel");
+  if(attach && panel){
+    attach.onclick = (e) => {
+      e.preventDefault();
+      const open = attach.getAttribute("aria-expanded") === "true";
+      attach.setAttribute("aria-expanded", open ? "false" : "true");
+      panel.hidden = open;
+    };
+    // 点面板外面就收起来。不这么做，面板会一直盖在输入框上。
+    document.addEventListener("click", (e) => {
+      if(panel.hidden) return;
+      if(attach.contains(e.target) || panel.contains(e.target)) return;
+      attach.setAttribute("aria-expanded", "false");
+      panel.hidden = true;
+    });
+  }
+  if(photo) photo.onclick = () => { chatHint(""); $("chat-photo-input").click(); };
+  if(video) video.onclick = () => { chatHint(""); $("chat-video-input").click(); };
+  if(voice && !voice.cbPushToTalk){
+    attachPushToTalk(voice, {
+      hint: (t) => chatHint(t),
+      status: (t) => setStatus(t),
+      target: $("input"),
+      baseText: () => "",
+      setBaseText: (said) => {
+        const box = $("input");
+        box.value = box.value ? box.value + "\n" + said : said;
+        box.dispatchEvent(new Event("input", {bubbles: true}));
+      },
+      addKind: () => {},
+      // 麦克风是图标按钮：复位时不能把图标换成文字，否则按钮会忽大忽小。
+      label: "🎤",
+    });
+  }
+  const pi = $("chat-photo-input");
+  if(pi) pi.onchange = () => { const f = pi.files && pi.files[0]; if(f) chatPickPhoto(f); pi.value = ""; };
+  const vi = $("chat-video-input");
+  if(vi) vi.onchange = () => { const f = vi.files && vi.files[0]; if(f) chatPickVideo(f); vi.value = ""; };
+}
+
 async function send(text, opts){
   busy = true;
   sendBtn.disabled = true;
@@ -1351,6 +1694,31 @@ async function send(text, opts){
   thinking.querySelector(".bubble").style.opacity = ".6";
   stream.appendChild(thinking);
   setStatus("正在处理…");
+    // 图/视频附件先落库（复用既有 /api/photo/save 的 attachments 机制），
+    // 再把这句话发去对话。落库失败不拦住发送：用户打的字不能因为附件没存下就丢掉，
+    // 但要在输入区状态行里说清哪一步没成。
+    const pending = chatDrafts.slice();
+    if(pending.length){
+      chatHint("正在保存 " + pending.length + " 个附件…");
+      try{
+        await post("/api/photo/save", {
+          subject_id: "",
+          image_b64: "",
+          draft_text: draft,
+          attachments: pending.map(function(d){return {b64: d.b64, media: d.media,
+            note: d.kind === "video" ? "视频附件（模型不看）" : "图片附件"};}),
+          input_kinds: pending.some(function(d){return d.kind === "video";})
+            ? ["text", "video"] : ["text", "image"],
+        });
+        chatDrafts = [];
+        renderChatDrafts();
+        chatHint("附件已随这条记录存档。");
+      }catch(err){
+        chatHint("附件没存下：" + (err.message || "原因没给")
+                 + "。文字照常发出，附件可在记事本里重试。");
+      }
+    }
+
 
   try{
     // 先分清这句话是交办、补充纠正，还是问进展。
@@ -1786,7 +2154,12 @@ $("side").addEventListener("click", async (e) => {
   const personBtn = e.target.closest("[data-person]");
   if(personBtn){ openPerson(personBtn.dataset.person); return; }
   const planBtn = e.target.closest("[data-open-plan]");
-  if(planBtn){ openPlan(planBtn.dataset.openPlan); return; }
+  if(planBtn){
+    // 先收侧栏再开详情：不收的话窄屏上侧栏盖住详情，用户以为点了没反应。
+    try{ $("side").classList.remove("open"); }catch(_){}
+    openPlan(planBtn.dataset.openPlan);
+    return;
+  }
   const taskBtn = e.target.closest("[data-open-task]");
   if(taskBtn){
     $("side").classList.remove("open");
@@ -1830,7 +2203,23 @@ async function openPlan(planId){
      本地演示用 A/B/C 三个身份、两个家庭（小周与配偶小林同家），
      不是生产多用户认证。
   */
-  const d = await api("/api/plan/" + planId);
+  let d;
+  try{
+    d = await api("/api/plan/" + planId);
+  }catch(err){
+    /* 打不开就必须说为什么。原来这里没有 try/catch，异常一路冒到
+       window.onerror，用户在视口里看不到任何变化——分不清是没点上、
+       程序坏了，还是这件事不该他看。这三种都要给一句能看懂的话。 */
+    const why = (err && err.message) || "没读到这件事";
+    setStatus("这件事没打开：" + why);
+    try{
+      $("sheet-title").textContent = "这件事看不了";
+      $("sheet-body").innerHTML = '<div class="notice bad">' + esc(why) + '。'
+        + '你不是这件事的参与方，或者它已经被撤销。可以回到侧栏看其它事项。</div>';
+      $("sheet").classList.add("open");
+    }catch(_){}
+    return;
+  }
   const mine = (d.participants || []).filter((p) => p.owner_id === ownerId);
   let h = '<h2 id="sheet-title">' + esc(d.title) + '</h2>';
   h += '<div class="sub">' + esc(d.utterance || "") + '</div>';
@@ -3893,6 +4282,11 @@ $("btn-demo").addEventListener("click", () => {
   let h = '<h2 id="sheet-title">演示设置</h2>'
     + '<div class="sub settings-intro pair-desktop-only">模型连接、手机访问与「把这台电脑加入助手」，都在这里管理。</div>'
     + '<div class="sub settings-intro pair-phone-only">你正在用手机访问，连的是某台电脑上的同一个助手。</div>'
+    // 窄宽度下桌面-only 的整段会被隐藏。不解释的话，桌面用户把窗口拖窄，
+    // 会看到「配置模型服务商／管理连接设备／重置演示资料」凭空消失，
+    // 以为功能坏了。这里明说它们只是没显示，以及怎样才能看到。
+    + '<div class="sub pair-phone-only">窗口窄于 600px 时，模型连接、设备管理与重置演示资料不显示；'
+    + '把窗口拉宽就能看到。这些是运行者维护项，手机上不需要操作。</div>'
     + '<section class="settings-section"><div class="settings-heading"><h3>当前身份</h3></div>'
     + '<div class="settings-value">' + esc(meName || "本人") + '（由本次会话决定）</div>'
     + '<div class="sub">普通使用不需要切换身份。演示身份切换默认关闭，只有运行者设了 '
@@ -3917,6 +4311,18 @@ $("btn-demo").addEventListener("click", () => {
     // 设备列表常驻：不生成配对码也看得到已加入的电脑，可单独撤销。
     + '<div style="margin-top:10px"><button class="btn ghost pair-desktop-only" id="demo-devices" aria-expanded="false" aria-controls="device-box">管理连接设备</button></div>'
     + '<div id="device-box" class="pair-desktop-only" style="margin-top:10px"></div>'
+    // 预留占位（t68）：只是先把将来会怎么接说清楚。没有接入链路、没有授权通道，
+    // 所以不放任何可点按钮、不发任何请求、不存凭证、不轮询。
+    // 虚线框 + 「开发中／未接入」标就是为了让人一眼看出这是预告，不是功能。
+    + '<section class="settings-section"><div class="settings-heading"><h3>预留设备</h3>'
+    + '<span class="reserved-tag">开发中／未接入</span></div>'
+    + '<div class="sub">下面两类还没接上，先说明它们将来会是什么、能碰哪些数据。</div>'
+    + '<div class="reserved-item"><b>手机（Amoo · step x neo）</b>'
+    + '<span>将来由它自己的 App 或系统助理接进来，和这台电脑上的插件是两条独立通道，'
+    + '互不需要配对码；手机只负责把事交进来、把同一件事的回执带回去。</span></div>'
+    + '<div class="reserved-item"><b>智能家电</b>'
+    + '<span>将来按一台一授权接：默认只能读状态，任何控制动作都要你本人在当次确认；'
+    + '不默认开放远程控制，不跨设备共享凭证。</span></div></section>'
     + '<div class="sub pair-phone-only">插件只跑在桌面 Chrome/Edge 上，手机不能安装也不能配对。在电脑上打开同一服务完成加入，回执会回到这件事里。手机上看代填回执：打开同一件事，点事项卡上的「查看代填回执」。</div></section>'
     + '<section class="settings-section pair-desktop-only"><div class="settings-heading"><h3>演示资料</h3></div>'
     + '<div class="sub">商品与订单均为测试数据。购买仅作本地模拟登记，没有真实支付或配送。</div>'
@@ -4185,11 +4591,17 @@ async function loadDevices(){
 // 不一次堆六条。默认不把每句话都当成买礼物。
 // CONTEXT：会话中，跟在助手回答末尾。从当前这件事的实际状态推导下一步，
 // 推导不出来就少给或不给——宁可空着，也不拿猜的引导误导人。
+/* A 套：首次使用或久未回来。短，教这个助手能干什么，不一次堆六七条。
+   已经在聊某件事时不教「第一次可以说什么」——那会把人从手上这件事带走；
+   改成贴着那件事给一两条。 */
 const QUICK_INTRO = [
   "周末三家一起带孩子出去玩，我出 100 以内",
   "记一下孩子这周的情况",
   "给小周的女儿准备生日礼物，300元以内，别和我上次送的重复",
+];
+const QUICK_INTRO_ONGOING = [
   "现在办到哪一步了？",
+  "改我的条件",
 ];
 // 离开多久算「久未使用」。取 30 分钟：短于一次认真的家庭安排沟通，
 // 长于随手回来看看。阈值只影响显示哪一套，不影响任何业务状态。
@@ -4198,17 +4610,32 @@ let lastMsgAt = 0;        // 最近一次收发消息的时间戳
 let sawAssistant = false; // 这次会话里有没有出现过助手回复
 let lastSaid = null;      // 最近一次 /api/say 的响应，用来推导上下文引导
 
-/* 上下文引导：从当前这件事推。推不出依据就给空数组，不硬凑。 */
+/* 上下文引导：从当前这件事的**实际状态**推，推不出依据就给空数组，不硬凑。
+   依据只取 /api/say 这次响应里已经有的字段，不为出引导额外打接口：
+     plan_id / missing_families / requested_families / own_cap /
+     current_version / needs_replan / task_id / kind。
+   - 还差几家没进事项 → 先邀请，别催着看方案；
+   - 自己这一方还没给条件 → 先改我的条件；
+   - 已经出方案 → 看还差谁；
+   - 三条都推不出来就只给「打开这件事」，宁少勿凑。 */
 function contextQuick(){
   const said = lastSaid;
   if(!said) return [];
   const out = [];
   if(said.plan_id){
     out.push("打开这件事");
-    // 这几条只在有方案、且还差人或差条件时才给。方案状态由打开时读，
-    // 这里只保证「有方案可看」和「能改自己这一方」。
-    out.push("改我的条件");
-    out.push("看看还差谁");
+    const missing = Number(said.missing_families || 0);
+    if(missing > 0){
+      out.push("邀请另一个家庭参与");
+    }
+    // 自己这一方有没有给过条件：家庭活动看出资上限，普通事项看不出资上限就不猜。
+    const ownGiven = !!(said.own_cap || said.own_conditions);
+    if(!ownGiven){
+      out.push("改我的条件");
+    }
+    if(Number(said.current_version || 0) > 0 && !said.needs_replan){
+      out.push("看看还差谁");
+    }
   }else if(said.task_id){
     out.push("打开这件事");
     out.push("现在办到哪一步了？");
@@ -4223,7 +4650,11 @@ function contextQuick(){
    其余情况走上下文那一套。 */
 function quickSet(){
   if(!sawAssistant) return QUICK_INTRO;
-  if(Date.now() - lastMsgAt > QUICK_IDLE_MS) return QUICK_INTRO;
+  if(Date.now() - lastMsgAt > QUICK_IDLE_MS){
+    // 久未回来：已经在聊的事接着给两条，不从头教。
+    return (lastSaid && (lastSaid.plan_id || lastSaid.task_id))
+      ? QUICK_INTRO_ONGOING : QUICK_INTRO;
+  }
   return contextQuick();
 }
 
@@ -4234,6 +4665,7 @@ function renderQuick(){
   box.innerHTML = set.map((q) => '<button type="button">' + esc(q) + '</button>').join("");
 }
 renderQuick();
+wireChatInputs();
 $("quick").addEventListener("click", (e) => {
   const b = e.target.closest("button");
   if(!b || busy) return;

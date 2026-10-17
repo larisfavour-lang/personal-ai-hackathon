@@ -50,6 +50,24 @@ def _apply_model_config():
 _apply_model_config()
 
 app = FastAPI(title="Personal AI 黑客松作品", version="0.1.0")
+# 静态 HTML 不许被浏览器缓存。之前只有 / 和 /apps 这两个路由带了 no-store，
+# 而 /static/index.html 走的是 StaticFiles 挂载，响应里没有 cache-control，
+# 浏览器按启发式缓存——改了页面用户在手机/桌面上看到的还是上一版，
+# 「改过的地方像没生效」。这个中间件给所有 /static 下的 HTML 补上头。
+@app.middleware("http")
+async def _no_store_static_html(request, call_next):
+    response = await call_next(request)
+    try:
+        path = request.url.path or ""
+        if path.startswith("/static/") and (path.endswith(".html") or path.endswith(".webmanifest")):
+            response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
+    except Exception:
+        pass
+    return response
+
+
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
 
@@ -191,7 +209,13 @@ def _record_reply(result):
         return "记下了：" + "；".join(
             "%s%s" % (c["subject"], _attr_label(c["attribute"]) + c.get("value", ""))
             for c in changes if not c.get("unchanged"))
-    return "我记下了。"
+    # 走到这里说明这条话里没有可记的内容：既没有主体也没有值。
+    # 原来回一句「我记下了。」，用户以为存上了，实际什么都没落——
+    # 那是拿假成功冒充结果，比不回复更糟。
+    # 但修正版也不能写成训话：不复述他刚说的那句话，不数落「什么都没记」，
+    # 直接说清要什么、给一个能照着写的例子就够。
+    return ("记孩子的事，得告诉我是谁、做了什么。"
+            "比如「小雨这周自己读完了两本绘本」。")
 
 
 @app.get("/")

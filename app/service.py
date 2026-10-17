@@ -1152,7 +1152,10 @@ def _save_event_attachments(db, event_id, owner_id, attachments):
         if not b64:
             continue
         media = str(a.get("media") or "image/jpeg")
-        if media not in ("image/jpeg", "image/png", "image/webp"):
+        # 视频也走同一个附件机制：t61 起对话输入区可以带视频附件。
+        # 视频只存档，不进任何模型提示词——见 docs/evidence/chat-input-modes-20261017.md。
+        if media not in ("image/jpeg", "image/png", "image/webp",
+                         "video/mp4", "video/quicktime", "video/webm"):
             media = "image/jpeg"
         have = db.row(
             "SELECT attachment_id FROM event_attachment WHERE event_id=? AND b64=?",
@@ -1935,7 +1938,7 @@ def _group_activity_reply(text, cap, families, missing):
     # 说明写短。事实一条不少：出资上限只是本人这一方、别家自己说；
     # 已知家庭有哪些；说的几家只认出几家、缺的留着待确认；
     # 各家条件各家自己补。不堆「不会…也不会…」那种多重否定。
-    lines = ["好，这件事按家庭活动记下来了，不开礼物、也不用点一个孩子。"]
+    lines = ["这件事按家庭活动记下了。"]
     if cap:
         lines.append("「%s」记在**本人出资上限**里，只是你家最多出多少；"
                      "别家出多少由别家自己说。" % cap)
@@ -1949,11 +1952,11 @@ def _group_activity_reply(text, cap, families, missing):
                                           "、".join(c["name"] for c in f["children"])))
             else:
                 parts.append("%s（有几个孩子还没记录）" % f["label"])
-        lines.append("按你已经记下的关系，这边知道：" + "；".join(parts) + "。")
+        lines.append("按已记下的关系，知道的有：" + "；".join(parts) + "。")
     if missing:
         lines.append("你说了 %d 家，只认得出 %d 家。剩下 %d 家没有记录，先留着待确认。"
                      % (len(families) + missing, len(families), missing))
-    lines.append("各家的条件由各家从自己的入口补；都齐了我排一版方案给大家确认。")
+    lines.append("各家的条件各家自己补；齐了我排一版方案给大家确认。")
     return "\n".join(lines)
 
 
@@ -3585,6 +3588,14 @@ _RELATION_GROUP = {
 }
 
 
+# 送礼管家里的关系分类 → 侧栏分组。和 _RELATION_GROUP 分开：
+# 前者是送礼场景内的私有档案，后者是家庭结构与社交关系，两层不混。
+_GIFT_RELATION_GROUP = {
+    "长辈": ["家人与亲属"], "晚辈": ["家人与亲属"], "同龄人": ["朋友与同学"],
+    "朋友": ["朋友与同学"], "同事": ["工作与业务"], "亲人": ["家人与亲属"],
+}
+
+
 def _groups_for_person(db, row):
     """这个人在哪些组里。组可以重叠，去重后按固定顺序返回。
 
@@ -3596,7 +3607,17 @@ def _groups_for_person(db, row):
     备注里的背景（「通过小周认识」）不参与分组：那是相识过程，
     不是这个人和我的关系，也不该因此多出一个组。
     """
+    # 送礼管家里的关系分类也参与分组，但读的是 attributes_json.gift_target，
+    # 不写回 person.relation——那一列驱动家庭结构判断，混入送礼关系会让孩子数算错。
     found = set(_RELATION_GROUP.get(row["relation"], []))
+    try:
+        _attrs = json.loads(row.get("attributes_json") or "{}")
+    except (ValueError, TypeError):
+        _attrs = {}
+    gift = _attrs.get("gift_target") if isinstance(_attrs, dict) else None
+    if isinstance(gift, dict):
+        for g in _GIFT_RELATION_GROUP.get(gift.get("relationship") or "", []):
+            found.add(g)
     # 我和这个人之间的每条关系都算：一条记录只写一个关系角色，
     # 一个人可以同时是朋友和前同事，relation 表里就是两条。
     for r in db.rows(
@@ -6300,7 +6321,13 @@ def is_gift_target(db, person_id):
 
 
 def create_gift_target(db, owner_id, name="", relationship="", person_id="", note=""):
-    """把一个人标记为送礼对象并设定关系分类。可关联已有 person，也可新建。"""
+    """把一个人标记为送礼对象并设定关系分类。可关联已有 person，也可新建。
+
+    **不写 person.relation**：那一列驱动家庭结构（配偶/同户）判断，也驱动侧栏分组。
+    送礼管家里的关系分类是送礼场景内的私有档案层，写进 relation 会把
+    「给爸爸送礼」变成「我爸是我家户主」，家庭推导和孩子数跟着错。
+    侧栏分组改读 attributes_json.gift_target，见 _groups_for_person。
+    """
     if relationship and relationship not in GIFT_RELATIONSHIP_CATEGORIES:
         raise ValueError("关系分类须为：%s" % "/".join(GIFT_RELATIONSHIP_CATEGORIES))
     if person_id:
@@ -6317,6 +6344,8 @@ def create_gift_target(db, owner_id, name="", relationship="", person_id="", not
         if _person_by_name(db, owner_id, name) is not None:
             raise ValueError("已存在同名人物，请关联这个人物而不是重复新建")
         pid = dbm.new_id("p")
+        # 新建的人默认 "other"：没有任何关系证据时不猜。
+        # 侧栏分组另走 attributes_json.gift_target，不会掉进「未分组」。
         db.execute("INSERT INTO person(person_id,owner_id,name,relation,note) VALUES(?,?,?,?,?)",
                    (pid, owner_id, name, "other", note or "送礼对象"))
         created = True
