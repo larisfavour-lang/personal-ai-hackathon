@@ -20,6 +20,30 @@ LOG = Path("/tmp/pa_server.log")
 PID = ROOT / "data" / "server.pid"
 
 
+def load_dotenv(path=None):
+    """把 .env 里的 KEY=VALUE 读进环境变量，已存在的环境变量优先。
+
+    没有这一步，模型密钥和接口地址每次重启都要重新手敲一遍 export，
+    漏一次的表现是「连不上」但看不出是没配。.env 已在 .gitignore 里，
+    密钥不会随源码分发。
+    """
+    env_file = Path(path or (ROOT / ".env"))
+    if not env_file.is_file():
+        return
+    for line in env_file.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+
+load_dotenv()
+
+
 def lan_ip():
     """取本机局域网 IP；取不到就返回空串，由调用方说明。
 
