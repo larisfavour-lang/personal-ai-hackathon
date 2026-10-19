@@ -32,34 +32,37 @@
 
 要解决的是三件事：同一个人的情况跟不同的人反复讲；几个人约一件事没有版本，改了口径对不上；换个页面办同一件事，条件从头再填。
 
-解法是后端持有一份状态，前面接各种界面。这份状态记四样东西：谁和谁是什么关系、这信息是什么时候从哪来的；哪几条授权给哪个应用读；一件事进行到第几版、各家各自什么条件；谁对哪一版表过态、执行到哪一步。界面换来换去，这四样不动。
+能力是这些：记住谁和谁是什么关系、信息什么时候从哪来；资料存下来、图能读出字；一件事有版本，谁对哪一版点头记在哪儿；自己的应用和设备能接进来；电脑上的页面能代填。做这些的时候，未授权的数据不进模型提示词，代表审阅不算本人接受。
+
+形态是另一件事，说的是这些能力通过什么交到你手上。Web 只是现在的演示载体。
 
 ```mermaid
 %%{init: {"theme":"base","themeVariables":{"background":"#f7f6f3","mainBkg":"#eceae4","primaryColor":"#eceae4","primaryTextColor":"#20242b","primaryBorderColor":"#34463f","secondaryColor":"#eef1ee","secondaryBorderColor":"#8a9a92","tertiaryColor":"#f7f6f3","tertiaryBorderColor":"#d9d6cf","lineColor":"#5b6068","textColor":"#20242b","fontFamily":"PingFang SC, Microsoft YaHei, sans-serif","fontSize":"15px","clusterBkg":"#f7f6f3","clusterBorder":"#d9d6cf","edgeLabelBackground":"#f7f6f3","nodeBorder":"#34463f","actorBkg":"#eceae4","actorBorder":"#34463f","actorTextColor":"#20242b","signalColor":"#5b6068","signalTextColor":"#20242b","noteBkgColor":"#eef1ee","noteTextColor":"#20242b","noteBorderColor":"#8a9a92","labelBoxBkgColor":"#eceae4","labelBoxBorderColor":"#34463f","labelTextColor":"#20242b","sequenceNumberColor":"#f7f6f3","activationBkgColor":"#eef1ee","activationBorderColor":"#8a9a92"}}}%%
 flowchart TB
-  subgraph NOW["已经交付的界面"]
+  subgraph FORM["同一份能力，通过什么形态交付"]
     direction LR
-    W["手机优先 Web<br/>对话交办 · 资料库 · 事项跟进"]
-    APPS["小应用 · API · 连接器<br/>三个轻量应用，加接入自己的应用与设备"]
-    EXT["桌面 Chrome 插件<br/>在电脑上代填页面，回执回同一件事"]
+    F1["手机优先 Web<br/>现在的演示载体"]
+    F2["系统级个人助理"]
+    F3["独立的个人助理应用"]
+    F4["被第三方 Agent 调用"]
   end
-  subgraph LATER["同一份底座还能长成的形态"]
-    direction LR
-    AG["给第三方 Agent 调用的能力<br/>读取和修正有效信息 · 发起协商 · 查执行结果"]
-    APP["独立的个人助理应用<br/>自有入口 · 事项管理 · 授权下的事件续办"]
-  end
-  BASE["能力底座<br/>人物关系与来源 · 授权范围 · 事项版本 · 执行回执"]
-  NOW --> BASE
-  LATER --> BASE
+  CAP["能力<br/>关系与来源 · 资料与读图 · 事项版本与表态 · 接入自己的应用与设备 · 电脑代填"]
+  F1 --> CAP
+  F2 --> CAP
+  F3 --> CAP
+  F4 --> CAP
 ```
 
-界面可以一直加，后端不用重写。已交付的三种共用同一份状态，所以在一个地方改的条件，另一个地方接着用。下面两种还没有实现，也没有被任何外部 Agent 或平台接入；写在这里是说明这份状态支持长成这个样子，不是当前能力。
+手机优先 Web 是现在交付的。系统级个人助理、独立应用、被第三方 Agent 调用这三种还没有实现，也没有被任何外部 Agent 或平台接入；写在这里是说明能力不依赖某一种前端，不是当前进度。
 
-| 界面 | 做什么 | 现在到哪一步 |
+现在交付的形态有两种，能力都在同一份状态上：
+
+| 形态 | 覆盖的能力 | 现在到哪一步 |
 |---|---|---|
-| 手机优先 Web | 对话交办、资料库、事项跟进 | 可用，演示主路径 |
-| 小应用 · API · 连接器 | 三个轻量应用，加接入自己的应用与设备 | 可用；三方开放 API 为明确标注的模拟数据 |
-| 桌面 Chrome 插件 | 在电脑上代填页面，回执回到同一件事 | 可用；只跑桌面 Chrome/Edge，Android 不支持装扩展 |
+| 手机优先 Web | 对话交办、资料库、事项跟进，以及小应用页（学习软件／周末安排／送礼管家）和数据接入、关系分类 | 可用，演示主路径。三方开放 API 是明确标注的模拟数据 |
+| 桌面 Chrome 插件 | 在电脑上按你授权的字段代填页面，回执回到同一件事 | 可用。只跑桌面 Chrome/Edge，Android 不支持装扩展 |
+
+小应用、数据接入、连接器都是 Web 里的页面，不是另一种形态；它们是能力在不同场景下的用法。
 
 ## 核心：多方协商
 
