@@ -106,17 +106,23 @@ flowchart TD
   Q -->|"只补一句备注"| T["什么都不影响<br/>按原计划继续"]
 ```
 
-### 图先落草稿，送不送你说了算
+### 录入方式灵活，哪条路都不白走
+
+打字、语音、拍图、从图里认字，四种都能进同一条草稿。草稿在离开设备之前一直停在本机，你可以改、可以删、可以放着以后再来；每一次要不要送模型，都由你点那一下决定。
 
 ```mermaid
 %%{init: {"theme":"base","themeVariables":{"background":"#f7f6f3","mainBkg":"#eceae4","primaryColor":"#eceae4","primaryTextColor":"#20242b","primaryBorderColor":"#34463f","secondaryColor":"#eef1ee","secondaryBorderColor":"#8a9a92","tertiaryColor":"#f7f6f3","tertiaryBorderColor":"#d9d6cf","lineColor":"#5b6068","textColor":"#20242b","fontFamily":"PingFang SC, Microsoft YaHei, sans-serif","fontSize":"15px","clusterBkg":"#f7f6f3","clusterBorder":"#d9d6cf","edgeLabelBackground":"#f7f6f3","nodeBorder":"#34463f","actorBkg":"#eceae4","actorBorder":"#34463f","actorTextColor":"#20242b","signalColor":"#5b6068","signalTextColor":"#20242b","noteBkgColor":"#eef1ee","noteTextColor":"#20242b","noteBorderColor":"#8a9a92","labelBoxBkgColor":"#eceae4","labelBoxBorderColor":"#34463f","labelTextColor":"#20242b","sequenceNumberColor":"#f7f6f3","activationBkgColor":"#eef1ee","activationBorderColor":"#8a9a92"}}}%%
 flowchart LR
-  A["拍一张图"] --> B["图先进本机草稿<br/>缩略图立即可见"]
-  B --> C{"由你决定"}
-  C -->|"识别图里的文字"| D["这一次才送模型<br/>文字进正文框"]
-  C -->|"只把图存进资料库"| E["一次模型都不调<br/>图作为配图留下"]
-  C -->|"先裁剪再识别"| F["只有框住的那块送识别"]
+  A["打字"] --> D["同一条草稿<br/>停在本机，可改可删"]
+  B["语音"] --> D
+  C["拍一张图"] --> D
+  D --> E{"由你决定这一步送不送模型"}
+  E -->|"认出图里的文字"| F["文字进正文框<br/>已写的字不动"]
+  E -->|"只把图作配图存下"| G["不调模型<br/>图跟着记录存"]
+  E -->|"先裁剪再认"| H["只有框住的那块送识别"]
 ```
+
+走错路也不丢东西：识别失败会说原因，图和已写的正文都留着；取消草稿不会多出一条记录。
 
 ## 特色功能
 
