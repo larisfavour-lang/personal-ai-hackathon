@@ -313,7 +313,7 @@ details[open] summary::before{transform:rotate(90deg)}
 .kv .item.old{opacity:.62}
 .kv .item.old .v{text-decoration:line-through}
 .chip{display:inline-block;font-size:12px;padding:3px 10px;border-radius:20px;
-  background:var(--paper-2);border:1px solid var(--line);color:var(--ink-2);margin:0 6px 6px 0}.person-row{margin-bottom:8px}.person-groups-tag{font-size:11.5px;color:var(--ink-3);margin-top:2px;padding-left:2px}
+  background:var(--paper-2);border:1px solid var(--line);color:var(--ink-2);margin:0 6px 6px 0}.moved-note{margin-top:12px;padding:8px 10px;border:1px dashed var(--line-2);border-radius:10px;font-size:12px;color:var(--ink-3);line-height:1.6}.linkbtn{border:none;background:none;padding:0 2px;color:var(--ink-2);cursor:pointer;font:inherit;text-decoration:underline;text-underline-offset:2px}.person-row{margin-bottom:8px}.person-groups-tag{font-size:11.5px;color:var(--ink-3);margin-top:2px;padding-left:2px}
 .chip.btn-chip{cursor:pointer}
 @media (hover:hover){.chip.btn-chip:hover{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}}
 /* 裁剪预览。四角的把手要大：手机上手指点不中小块，
@@ -599,10 +599,10 @@ button:active:not(:disabled){transform:translateY(1px)}
   <!-- 旧拍照流的两个隐藏 file input（#photo-input / #note-input）已删除：
        全文没有任何代码再点它们，只在 3818 行注释里作为退役说明被提到。
        新录入走 #note-photo-input / #note-attach-input（见 notePickImage）。 -->
-  <h2 style="margin-top:24px">小应用</h2>
-  <div class="sub" style="margin-bottom:8px">两个轻量应用共用同一份记录：
-    谁在学什么、周末怎么安排，都由它接着往下给建议。</div>
-  <button class="btn ghost" id="btn-open-apps">打开小应用</button>
+  <h2 style="margin-top:24px">小应用 · API · 连接器</h2>
+  <div class="sub" style="margin-bottom:8px">三个轻量应用共用同一份记录：
+    谁在学什么、周末怎么安排、送谁什么礼；自己的应用和设备也能接进来。</div>
+  <button class="btn ghost" id="btn-open-apps">打开小应用与连接器</button>
   <h2 style="margin-top:24px">我关心的人</h2>
   <div id="side-persons"></div>
 </aside>
@@ -1357,7 +1357,13 @@ async function renderSide(){
   // 一进 renderSide 就抛 "Cannot access 'waiting' before initialization"，
   // 侧栏整块渲染不出来（页面看着像没有事项）。
   const waiting = mattersData.waiting || [];
-  const tasks = (mattersData.matters || []).map((m) => ({
+  /* redirected 是「这件事已按别的方式重记」的旧事项：原话和当时系统的错误回应
+     都留着当历史，但它已经不是待办。原先它和转走后新建的那件并列显示，
+     同一句原话在列表里出现两次，用户会以为有两件事要办。
+     现在活跃列表只放还没走完的；转走的单独归到末尾的历史区，一行带过。 */
+  const allMatters = mattersData.matters || [];
+  const moved = allMatters.filter((m) => m.stage === "redirected");
+  const tasks = allMatters.filter((m) => m.stage !== "redirected").map((m) => ({
     id: m.task_id, kind: "task", title: m.utterance, stage: m.stage,
     outcome: m.outcome, waiting: waiting.filter((w) => w.task_id === m.task_id),
   }));
@@ -1369,9 +1375,18 @@ async function renderSide(){
   // 挂不上具体事项的在等条目(例如等模型调通)也列出来，不丢。
   const orphans = waiting.filter((w) => !tasks.some((t) => t.id === w.task_id));
   const all = tasks.concat(plans);
+  const movedLine = moved.length
+    ? '<div class="moved-note">另有 ' + moved.length + ' 件已按别的方式重记，'
+      + '原话和历史回应都保留，点下面这条能看到：'
+      + moved.map((m) => '<button class="linkbtn" data-open-task="' + esc(m.task_id) + '">'
+      + esc((m.utterance || "").slice(0, 14)) + '</button>').join("、")
+      + '</div>'
+    : "";
   mh.innerHTML = all.length
     ? all.map(matterItem).join("") + (orphans.length ? orphans.map(waitItem).join("") : "")
-    : '<div class="notice">还没有事项。跟我说一句话就行。</div>';
+      + movedLine
+    : (moved.length ? movedLine
+                    : '<div class="notice">还没有事项。跟我说一句话就行。</div>');
 
   // 在等的事单独一块。未回应不是同意，也不能显示成已经约好，
   // 所以这里只说清「在等谁、等什么、从什么时候开始等、现在能做什么」。

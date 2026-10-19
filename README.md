@@ -1,5 +1,20 @@
 # 我的小助手：记得身边人的情况，与人办事少协调
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-34463f.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/Python-3.10%2B-5b6068.svg)](https://www.python.org/)
+[![Tests](https://img.shields.io/badge/%E6%B5%8B%E8%AF%95-10%20%E5%A5%97%20%2B%20Node%2042%20%E6%9D%A1-8a9a92.svg)](#验证到哪一步)
+[![Demo](https://img.shields.io/badge/%E6%BC%94%E7%A4%BA-3%20%E5%88%86%2026%20%E7%A7%92-d9d6cf.svg)](docs/delivery/personal-ai-final-demo.mp4)
+
+**事情在一个地方交办，同一个助手接着办：同一个人的情况不用反复讲，同一个事项的条件不用在几个应用之间搬，改一个要求不用逐处改。**
+
+<p align="center">
+  <img src="docs/images/screen-home.png" width="185" alt="打开就是这几件事：未完的、在等的、要发起的都在第一屏">
+  <img src="docs/images/screen-note.png" width="185" alt="输入框旁的附件面板：图片两步选择、视频作附件">
+  <img src="docs/images/screen-settings.png" width="185" alt="不用配，扫码就连：模型默认已配好，预留设备标注建设中">
+  <img src="docs/images/screen-invite.png" width="185" alt="一次性邀请：对方自称并只填自己的条件">
+</p>
+
+
 个人 AI 黑客松作品。
 
 一个人的情况要跟不同的人反复讲。跟老师说孩子这周练了多久琴，跟另一个家长再讲一遍；跟同事交代过的背景，换个项目从头再说；给朋友帮过忙，下次他换了个人对接，你还得再讲一次。过两周自己也要重新回忆。
@@ -10,25 +25,103 @@
 
 我做的是个助理：事情在一个地方交办，它接着办。演示主线是家庭活动，另外覆盖送礼、朋友旅行和跨页面采购。
 
-里面有手机优先的对话页、资料库、小应用（学习软件／周末安排／送礼管家／数据接入／关系分类），还有一个 Chrome 插件。送礼和商店代填是另外的模拟用例，跟家庭活动不是一回事。
+里面有手机优先的对话页、资料库，一个「小应用 · API · 连接器」页（学习软件／周末安排／送礼管家三个轻量应用，加数据接入与关系分类），还有一个 Chrome 插件。送礼和商店代填是另外的模拟用例，跟家庭活动不是一回事。
 
-## 定位与方案
+## 这是什么
 
-定位是个人 AI 的能力底座：支撑跨应用记忆复用和跨用户协商办事。核心规则只有一条，知道一个人的情况，不等于可以把他的信息说出去。所以资料、授权、方案版本、回应、执行状态分别记录；模型负责读图、抽信息、提方案，身份、授权、预算和版本一致性由程序校验。
+一个能力底座，上面接三种界面。底座持有共同状态与业务规则，界面只提供适合自己任务的形态。
+核心规则只有一条：**知道一个人的情况，不等于可以把他的信息说出去。**
 
-当前形态是手机优先的 Web 演示，桌面 Chrome 插件作为电脑端的执行手。Web 只是演示载体，不是最终形态。
+```mermaid
+%%{init: {"theme":"base","themeVariables":{"background":"#f7f6f3","mainBkg":"#eceae4","primaryColor":"#eceae4","primaryTextColor":"#20242b","primaryBorderColor":"#34463f","secondaryColor":"#eef1ee","secondaryBorderColor":"#8a9a92","tertiaryColor":"#f7f6f3","tertiaryBorderColor":"#d9d6cf","lineColor":"#5b6068","textColor":"#20242b","fontFamily":"PingFang SC, Microsoft YaHei, sans-serif","fontSize":"15px","clusterBkg":"#f7f6f3","clusterBorder":"#d9d6cf","edgeLabelBackground":"#f7f6f3","nodeBorder":"#34463f","actorBkg":"#eceae4","actorBorder":"#34463f","actorTextColor":"#20242b","signalColor":"#5b6068","signalTextColor":"#20242b","noteBkgColor":"#eef1ee","noteTextColor":"#20242b","noteBorderColor":"#8a9a92","labelBoxBkgColor":"#eceae4","labelBoxBorderColor":"#34463f","labelTextColor":"#20242b","sequenceNumberColor":"#f7f6f3","activationBkgColor":"#eef1ee","activationBorderColor":"#8a9a92"}}}%%
+flowchart TB
+  subgraph BASE["能力底座 · 共同状态与业务规则"]
+    direction LR
+    P["人物 · 关系<br/>来源与时效"]
+    A["授权 · 读取范围"]
+    V["事项 · 方案版本"]
+    D["表态 · 执行回执"]
+  end
+  subgraph FORM["当前交付的三种界面"]
+    direction LR
+    W["手机优先 Web"]
+    APPS["小应用 · API · 连接器"]
+    EXT["桌面 Chrome 插件"]
+  end
+  W --> P
+  APPS --> A
+  EXT --> D
+  W --> V
+  APPS --> V
+  EXT --> V
+```
 
-同一个底座还能长成另外两种样子。一种是给现有 Agent 调用的能力：通过适配接口读取和修正有效的人物信息、发起协商、查询执行结果。另一种是承载独立的 PA：有自己的交互入口、事项管理，以及在明确授权下的事件续办。三种形态共用核心状态与业务规则，不以前端技术决定产品方向。
+Web 只是当前的演示载体，不是最终形态。同一个底座还能长成系统级的个人助理，
+或者可被第三方应用与 Agent 调用的能力；三种形态共用核心状态与业务规则。
 
-除当前这一种，另外两种都没有实现，也没有被任何外部 Agent 或平台接入。人物关系、来源与时效、应用读取范围、个人代表权限和事项版本由共同底座持有，各应用提供适合自己任务的界面。
+| 界面 | 做什么 | 现在到哪一步 |
+|---|---|---|
+| 手机优先 Web | 对话交办、资料库、事项跟进 | 可用，演示主路径 |
+| 小应用 · API · 连接器 | 三个轻量应用，加接入自己的应用与设备 | 可用；三方开放 API 为明确标注的模拟数据 |
+| 桌面 Chrome 插件 | 在电脑上代填页面，回执回到同一件事 | 可用；只跑桌面 Chrome/Edge，Android 不支持装扩展 |
 
-## 当前形态
+## 核心：多方协商
 
-产品定位是个人 AI 的能力底座：支撑跨应用记忆复用和跨用户协商办事，不是由某个前端形态定义的。人物关系、来源与时效、应用读取范围、个人代表权限和事项版本由共同底座持有；记忆持久存在，各应用提供适合自己任务的界面。
+这不是「群里接龙」。每个方案有版本号，谁点了头记在哪个版本上；本人没点头就不算约定，
+也不拿没确认的人凑数。
 
-同一个底座有两种未来形态。一种是作为现有 Agent 调用的能力：通过适配接口读取／修正有效人物信息、发起协商、查询执行结果。另一种是承载独立的 PA：自有交互入口、事项管理、在明确授权下的事件续办。两种形态共用核心状态与业务规则，不以前端技术决定产品方向。
+```mermaid
+%%{init: {"theme":"base","themeVariables":{"background":"#f7f6f3","mainBkg":"#eceae4","primaryColor":"#eceae4","primaryTextColor":"#20242b","primaryBorderColor":"#34463f","secondaryColor":"#eef1ee","secondaryBorderColor":"#8a9a92","tertiaryColor":"#f7f6f3","tertiaryBorderColor":"#d9d6cf","lineColor":"#5b6068","textColor":"#20242b","fontFamily":"PingFang SC, Microsoft YaHei, sans-serif","fontSize":"15px","clusterBkg":"#f7f6f3","clusterBorder":"#d9d6cf","edgeLabelBackground":"#f7f6f3","nodeBorder":"#34463f","actorBkg":"#eceae4","actorBorder":"#34463f","actorTextColor":"#20242b","signalColor":"#5b6068","signalTextColor":"#20242b","noteBkgColor":"#eef1ee","noteTextColor":"#20242b","noteBorderColor":"#8a9a92","labelBoxBkgColor":"#eceae4","labelBoxBorderColor":"#34463f","labelTextColor":"#20242b","sequenceNumberColor":"#f7f6f3","activationBkgColor":"#eef1ee","activationBorderColor":"#8a9a92"}}}%%
+sequenceDiagram
+  autonumber
+  participant U as 我
+  participant A as 助理
+  participant F as 另一家
+  U->>A: 周末三家一起带孩子出去玩，我出100以内
+  A->>A: 建事项；100 记在「本人出资上限」
+  A->>U: 还差谁、缺什么（第三家未知留缺口）
+  U->>A: 挑要公开的短字段，逐条确认
+  A->>A: 按各家当前条件排第 1 版
+  U->>A: 更正来源里的一个值
+  A->>A: 重新选字段、重新发布
+  U->>F: 生成一次性邀请链接
+  F->>A: 自称是谁，只填自己的条件与孩子名单
+  U->>A: 认可自称家庭
+  A->>A: 按全部当前条件重排第 2 版
+  F->>A: 本人对这一版表态
+  U->>A: 本人确认
+  Note over A: 只有本人对同一当前版本点头才算约定<br/>代表审阅只是建议，不等于本人接受
+```
 
-当前只交付其中一种形态的一个切片：一个独立的 PA——手机优先的 Web 演示，加上桌面 Chrome 插件作为电脑端的执行手。其它形态没有实现，也没有被任何外部 Agent 或平台接入。下面写的运行方式、手机访问和插件，都是这个切片的形态，不是产品定位本身。
+三条硬规则，测试里都有断言：**代表审阅不算本人接受**（模型以你名义看一版只是建议）；
+**同一个版本才计数**（改条件后旧同意立刻失效）；**未授权的数据进不了模型**（连提示词里都不出现）。
+
+### 条件改了，不一定都要重排
+
+```mermaid
+%%{init: {"theme":"base","themeVariables":{"background":"#f7f6f3","mainBkg":"#eceae4","primaryColor":"#eceae4","primaryTextColor":"#20242b","primaryBorderColor":"#34463f","secondaryColor":"#eef1ee","secondaryBorderColor":"#8a9a92","tertiaryColor":"#f7f6f3","tertiaryBorderColor":"#d9d6cf","lineColor":"#5b6068","textColor":"#20242b","fontFamily":"PingFang SC, Microsoft YaHei, sans-serif","fontSize":"15px","clusterBkg":"#f7f6f3","clusterBorder":"#d9d6cf","edgeLabelBackground":"#f7f6f3","nodeBorder":"#34463f","actorBkg":"#eceae4","actorBorder":"#34463f","actorTextColor":"#20242b","signalColor":"#5b6068","signalTextColor":"#20242b","noteBkgColor":"#eef1ee","noteTextColor":"#20242b","noteBorderColor":"#8a9a92","labelBoxBkgColor":"#eceae4","labelBoxBorderColor":"#34463f","labelTextColor":"#20242b","sequenceNumberColor":"#f7f6f3","activationBkgColor":"#eef1ee","activationBorderColor":"#8a9a92"}}}%%
+flowchart TD
+  C["有人改了一个条件"] --> Q{"改的是哪一类"}
+  Q -->|"时间 / 地点 / 活动内容<br/>孩子安排 / 交通"| R["这一版方案的内容变了<br/>旧约定失效，按新条件重排"]
+  Q -->|"只改自己这家的出资上限"| S["方案内容没变，不必重排<br/>这一家按新上限重新表态"]
+  Q -->|"只补一句备注"| T["什么都不影响<br/>按原计划继续"]
+```
+
+判据写在代码里，不把「有变化就得重排」当时默认规则。
+
+### 图先落草稿，送不送你说了算
+
+```mermaid
+%%{init: {"theme":"base","themeVariables":{"background":"#f7f6f3","mainBkg":"#eceae4","primaryColor":"#eceae4","primaryTextColor":"#20242b","primaryBorderColor":"#34463f","secondaryColor":"#eef1ee","secondaryBorderColor":"#8a9a92","tertiaryColor":"#f7f6f3","tertiaryBorderColor":"#d9d6cf","lineColor":"#5b6068","textColor":"#20242b","fontFamily":"PingFang SC, Microsoft YaHei, sans-serif","fontSize":"15px","clusterBkg":"#f7f6f3","clusterBorder":"#d9d6cf","edgeLabelBackground":"#f7f6f3","nodeBorder":"#34463f","actorBkg":"#eceae4","actorBorder":"#34463f","actorTextColor":"#20242b","signalColor":"#5b6068","signalTextColor":"#20242b","noteBkgColor":"#eef1ee","noteTextColor":"#20242b","noteBorderColor":"#8a9a92","labelBoxBkgColor":"#eceae4","labelBoxBorderColor":"#34463f","labelTextColor":"#20242b","sequenceNumberColor":"#f7f6f3","activationBkgColor":"#eef1ee","activationBorderColor":"#8a9a92"}}}%%
+flowchart LR
+  A["拍一张图"] --> B["图先进本机草稿<br/>缩略图立即可见"]
+  B --> C{"由你决定"}
+  C -->|"识别图里的文字"| D["这一次才送模型<br/>文字进正文框"]
+  C -->|"只把图存进资料库"| E["一次模型都不调<br/>图作为配图留下"]
+  C -->|"先裁剪再识别"| F["只有框住的那块送识别"]
+```
+
+不存在「先传整张图、再说边缘没上传」这种事。
 
 ## 特色功能
 
@@ -78,6 +171,10 @@ python start_server.py 8000
 
 改了时间或预算，只有受影响的约定要重新确认，别家不用把话再讲一遍。每个方案有版本，谁点了头记在哪个版本上；本人没点头就不算约定，也不拿没确认的人凑数。
 
+不是所有改动都要求重排。系统按改动落在哪类条件上分开对待：改了时间、地点、活动内容、孩子安排或交通，这一版方案的内容就变了，旧约定失效、按新条件重排；只改了自己这家的出资上限，方案内容没变，不必重排，但这一家此前的接受作废、按新上限重新表态；只补一句备注，什么都不影响，按原计划继续。判据写在这里，不把「有变化就得重排」当时默认规则。
+
+约朋友一起旅行走同一条链，条件字段换成旅行那套：目的地、假期长度、人均预算、住宿标准、能否带伴侣、忌口或体力。说「五一约朋友去云南」就会按朋友旅行记下，不会落进家庭活动。随行说不说由本人定，说了名字的进事项，没配自己助手的由声明人代决策——代决策单独记账，不算本人同意。
+
 1. 说「周末三家一起带孩子出去玩，我出100以内」，在回复里打开同一件事。100 元是你自己最多愿意出的钱，不是活动总预算，也不是答应了要付。
 2. 看看当前知道的情况：有哪些家庭、哪些孩子、什么还没确认。演示里的 A／B／C 是三个身份，B 小周和 C 小林同户，其实是两个家庭。第三家不知道就留着缺口，不把配偶算成第三家。
 3. 按现在有的条件排候选。只有真正参与的人接受同一个版本，才算约定下来；模型代表的审阅和本人点确认是两回事，没回应就是还没确认。
@@ -97,7 +194,7 @@ python start_server.py 8000
   - 「识别图里的文字，进正文框」——只有点这一下，图才送去做识别。文字加在原正文后面，中间换行，你已经写的字不动。
   - 「只把图存进资料库，不识别」——一次模型都不调，图只作为配图跟着记录存。
   - 「先裁剪再识别」（次级）——只有框住的那块送识别，取消裁剪就不调。不存在先送完整图、再说边缘没上传这种事。
-- **语音输入**：用浏览器自带的语音识别，在浏览器里完成，不送服务端。浏览器不支持或者不让用麦克风的时候，它会直说。
+- **语音输入**：用浏览器自带的语音识别，在浏览器里完成，不送服务端。**这一项要求安全上下文**：在电脑本机用 `http://localhost:8000` 打开可用；用局域网 IP（`http://192.168.x.x:8000` 这种）从手机打开时，浏览器按规范拒绝在非安全源里使用语音识别，按钮会直接停用并说明原因，不会出现“看起来能点、一按就失败”。这种打开方式下可以打字，或用输入法的语音转文字说完粘贴进来。
 - 核对错字、对象和发生日期之后再保存，再打开记录看看正文、来源和配图对不对。
 - 识别失败会说原因，图和你的正文都留着，可以改、可以重试、可以放着以后再来。模型返回空白不算识别成功。取消草稿不会多出一条记录。
 
@@ -150,7 +247,7 @@ python -m http.server 9000 --bind 127.0.0.1 \
 
 历史基线和以前的失败记录见[验收记录](<docs/acceptance-record.md>)。不要把 2026-10-15 的 22/22 当成当前全量通过。
 
-源码里带了八个测试文件和两个 Node 单测（共 42 条用例），跑法见[运行指南](<docs/run-standalone.md#测试不是日常启动命令>)。工程里还有一些历史脚本硬编码 8000、写固定临时文件或者直接动运行库，别在日常实例上批量跑；真实模型测试要花钱。
+源码里带了十个测试文件和两个 Node 单测（共 42 条用例），跑法见[运行指南](<docs/run-standalone.md#测试不是日常启动命令>)。工程里还有一些历史脚本硬编码 8000、写固定临时文件或者直接动运行库，别在日常实例上批量跑；真实模型测试要花钱。
 
 源码只对启动管理器的一行模块 docstring 做了泛化，运行逻辑没动，其余文件按原字节选。ZIP 和公开快照是同一套分发字节，逐文件的原／分发 SHA-256 记在独立的交付映射里。
 
@@ -158,7 +255,7 @@ python -m http.server 9000 --bind 127.0.0.1 \
 
 服务端语音转写不可用，26 次请求的记录在[语音核查摘要](<docs/delivery/verification-summary.md>)。四种死法都试过：带前缀的 `step/stepaudio-2.5-asr` 返回 404 `model_invalid`；去掉前缀返回 502 `Provider unreachable`；OpenAI 标准的 `/v1/audio/transcriptions` 端点不存在；音频 chat 模型能连通，但它把音频当对话接话，不吐转写。
 
-「说一段」走浏览器自带的 SpeechRecognition，不经过本作品服务端。浏览器可能用它自己的识别服务，受设备、权限和安全上下文限制。自动化只验了接线通不通，真麦克风还没实测。
+「说一段」走浏览器自带的 SpeechRecognition，不经过本作品服务端。它受设备、权限和**安全上下文**三重限制：用 `http://localhost` 或 `https://` 打开时可用；用局域网 IP 的 `http://` 打开时不可用——这时界面会提前把按钮停用并写清原因和替代办法，而不是等用户点了才失败。按住期间持续识别，中间换气停顿不会中断；松手才停。自动化只验了接线通不通，真麦克风还没实测。
 
 Step 的证据到配置标签和能核对的实际调用范围为止，不给百分比，也没有直接上游原始响应的捕获。真实电商、群消息发送、外部 Agent 接力、语义检索、公开多用户认证都没做。硬件加分资格不猜。
 
