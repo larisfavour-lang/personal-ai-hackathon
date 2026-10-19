@@ -1265,6 +1265,16 @@ def api_say(body: UtteranceBody, request: Request):
                     "own_cap": started["own_cap"],
                     "families": started["families"],
                     "missing_families": started["missing_families"]}
+        if intent == "friend_trip":
+            # 约朋友一起旅行：复用多方协调引擎，条件字段用朋友旅行那套。
+            # 原先进不来这条——friend_trip_intent 定义了却没接进分派，
+            # 主对话说「约朋友去大理」只会落进家庭活动或送礼。
+            started = service.start_friend_trip(db, client, owner_id, body.utterance)
+            return {"intent": intent, "kind": "friend_trip",
+                    "reply": started["reply"], "plan_id": started["plan_id"],
+                    "reused": started["reused"], "title": started["title"],
+                    "own_cap": started["own_cap"],
+                    "companions": started.get("companions", [])}
         task = service.create_task(db, client, owner_id, body.utterance)
         return {"intent": intent, "kind": "task", "task_id": task["task_id"],
                 "extracted": task["extracted"], "reused": bool(task.get("reused"))}

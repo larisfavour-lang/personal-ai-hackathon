@@ -1259,6 +1259,13 @@ PLAN_SCENARIOS = {
         "label": "家庭活动",
         "condition_keys": ("时间", "地点", "活动总预算", "本人出资上限",
                            "活动内容", "孩子安排", "交通", "备注"),
+        # 改动这些键，这一版方案的内容就变了，要重排；
+        # 只改「本人出资上限」影响的是这一家自己能不能接受，方案内容没变；
+        # 只改「备注」是补充说明，两样都不影响。
+        "plan_driving_keys": ("时间", "地点", "活动总预算", "活动内容",
+                              "孩子安排", "交通"),
+        "self_only_keys": ("本人出资上限",),
+        "context_keys": ("备注",),
         "own_cap_key": "本人出资上限",
         "total_budget_key": "活动总预算",
         "percap_key": None,
@@ -1268,6 +1275,10 @@ PLAN_SCENARIOS = {
         "label": "朋友旅行",
         "condition_keys": ("时间", "目的地", "假期长度", "人均预算", "本人预算上限",
                            "住宿标准", "交通", "能否带伴侣", "忌口或体力", "备注"),
+        "plan_driving_keys": ("时间", "目的地", "假期长度", "住宿标准",
+                              "能否带伴侣", "忌口或体力"),
+        "self_only_keys": ("本人预算上限",),
+        "context_keys": ("备注",),
         "own_cap_key": "本人预算上限",
         "total_budget_key": None,
         "percap_key": "人均预算",
@@ -2070,7 +2081,11 @@ def decide_plan(db, plan_id, participant_id, version, decision, reason="", chang
     # 此时点「接受」只是对一份作废内容的确认。
     plan = db.row("SELECT needs_replan FROM plan WHERE plan_id=?", (plan_id,))
     if plan is not None and plan["needs_replan"]:
-        raise ValueError("有家庭刚更新了条件，方案要重排后才能表态")
+        # 原写「方案要重排后才能表态」——把重排说成唯一出路。参与者改的不一定是
+        # 影响事情本身的条件。这里放行，但在决定里记下「这一版不含刚更新的条件」，
+        # 让用户在知情下选；要不要重排由界面给路径，不由这句错误导。
+        raise ValueError("有条件在排完这一版之后更新过；可以按新条件重排后再表态，"
+                         "也可以仍对当前版本表态，但那一版里没有刚更新的条件")
     if guest and guest["role"] == "guest" and decided_by != "person" and db.row("SELECT 1 FROM plan_decision WHERE plan_id=? AND participant_id=? AND version=? AND decided_by='person' AND decision<>'stale'", (plan_id, participant_id, version)):
         raise ValueError("本事项本人已明确表态，代表建议不能覆盖本人决定")
     # 同一参与方对同一版本只保留最后一次本人／代表表态。
@@ -2276,21 +2291,50 @@ def update_plan_condition(db, plan_id, actor_id, conditions, reason=""):
                (json.dumps(merged, ensure_ascii=False), side["participant_id"]))
     note = reason or ("%s 更新了自己的条件：%s" % (
         side["label"], "；".join("%s 改为 %s" % (k, v) for k, v in changed.items())))
-    # 条件变了，方案要重排：阶段退回待确认，各家原来的接受都不算数。
-    # 旧接受必须当场失效：哪怕上一版刚刚被三方全票接受，
-    # 条件一变，那份约定依据的就是旧条件，不能再算约定。
-    # 标 stale 而不是删掉，历史还在，能查清当时各自接受了什么。
-    db.execute("UPDATE plan_decision SET decision='stale', reason=? WHERE plan_id=?",
-               ("条件已更新，%s，旧接受不再有效" % note, plan_id))
-    db.execute("UPDATE plan SET stage='awaiting', outcome=? WHERE plan_id=?",
-               ("%s，方案要重排" % note, plan_id))
-    # needs_replan 持久化：模型重排失败、刷新、重新打开页面之后，
-    # 「条件已改、方案还没重排」这个事实都还在，不会被 awaiting 掩盖。
-    db.execute("UPDATE plan SET needs_replan=1 WHERE plan_id=?", (plan_id,))
+    # 不是所有改动都要求重排。参与者改的常常是不影响事情本身的小变量
+    # （备注、或者只是自己这家的出资上限），一律打回重排既徒增一轮协调，
+    # 也等于替用户判断「这点改动不要紧」。这里按改动落在哪类键上分开处理：
+    #   plan_driving：这一版方案的内容变了 → 旧接受失效，要重排；
+    #   self_only  ：只影响这一家自己能不能接受 → 方案内容没变，不必重排，
+    #                 但这一家要重新对当前版本表态（他之前的 accept 作废）；
+    #   context    ：补充说明 → 什么都不影响，原计划继续。
+    sc = PLAN_SCENARIOS.get(_plan_kind, PLAN_SCENARIOS["group_activity"])
+    driving = sorted(k for k in changed if k in sc["plan_driving_keys"])
+    selfonly = sorted(k for k in changed if k in sc["self_only_keys"])
+    ctxonly = sorted(k for k in changed if k in sc["context_keys"])
+    other = sorted(k for k in changed
+                   if k not in sc["plan_driving_keys"] and k not in sc["self_only_keys"]
+                   and k not in sc["context_keys"])
+    material = bool(driving or other)
+    if material:
+        # 旧接受必须当场失效：哪怕上一版刚刚被全票接受，条件一变，
+        # 那份约定依据的就是旧条件，不能再算约定。标 stale 而不是删掉，
+        # 历史还在，能查清当时各自接受了什么。
+        db.execute("UPDATE plan_decision SET decision='stale', reason=? WHERE plan_id=?",
+                   ("条件已更新，%s，旧接受不再有效" % note, plan_id))
+        db.execute("UPDATE plan SET stage='awaiting', outcome=? WHERE plan_id=?",
+                   ("%s，这一版是按更新前的条件排的" % note, plan_id))
+        db.execute("UPDATE plan SET needs_replan=1 WHERE plan_id=?", (plan_id,))
+    elif selfonly:
+        # 只改了自己这家的上限：方案内容没变，别家不必重新表态；
+        # 但这一家之前的 accept 作废——他是在旧的上限下接受的。
+        db.execute("UPDATE plan_decision SET decision='stale', reason=? WHERE plan_id=?",
+                   ("%s 改了自己这家的%s，他之前的接受不再有效" % (side["label"], "、".join(selfonly)),
+                    plan_id), )
+        db.execute("UPDATE plan_participant SET conditions_json=? WHERE participant_id=?",
+                   (json.dumps(merged, ensure_ascii=False), side["participant_id"]))
+        db.execute("UPDATE plan SET outcome=? WHERE plan_id=?",
+                   ("%s；方案内容没变，这一家按新上限重新表态即可" % note, plan_id))
+    else:
+        # 只改了备注一类：原计划继续，不做任何状态回退。
+        db.execute("UPDATE plan SET outcome=? WHERE plan_id=?",
+                   ("%s；不影响方案，按原计划继续" % note, plan_id))
     db.audit(plan_id, actor_id, "plan_condition_updated",
              {"participant_id": side["participant_id"], "label": side["label"],
               "conditions": merged, "changed_fields": sorted(changed),
-              "reason": note, "needs_replan": True})
+              "reason": note, "needs_replan": material,
+              "materiality": {"driving": driving, "self_only": selfonly,
+                              "context": ctxonly, "unclassified": other}})
     st = plan_status(db, plan_id)
     return {
         "plan_id": plan_id, "version": st["current_version"],
@@ -2477,13 +2521,20 @@ def classify_intent(db, client, owner_id, utterance):
     # 但不会同时说「几家 + 一起做什么」。
     if group_activity_intent(text):
         return "group_activity"
+    # 约朋友一起旅行：复用同一套多方协调引擎，条件字段用朋友旅行那套
+    # （目的地、假期长度、人均预算……），不是家庭活动那套。原先这个函数
+    # 定义了却没接进分派，主对话里说「约朋友去大理」只会落进家庭活动或送礼，
+    # 朋友旅行只能从受邀页或测试种子进——文档和视频却说它支持。
+    # 放在 group_activity 之后：多家庭句不会被它抢走。
+    if friend_trip_intent(text):
+        return "friend_trip"
     persons = db.rows("SELECT name, relation FROM person WHERE owner_id=? ORDER BY name",
                       (owner_id,))
     person_lines = "\n".join("- %s（%s）" % (p["name"], p["relation"]) for p in persons) or "（暂无）"
     system = (
         "判断用户这句话属于哪一类，只输出一个 JSON 对象，不要解释。\n"
         "字段 intent: 字符串，只能是 task / record / status / clarify / followup /"
-        " family_update / group_activity 七者之一。\n"
+        " family_update / group_activity / friend_trip 八者之一。\n"
         "  task: 用户要你去做一件事，例如准备礼物、买东西、安排事情。\n"
         "  record: 用户在补充或更正你记下的资料，例如「记错了，喜欢拼图的是哥哥」、\n"
         "          「小雨现在二年级了」「她喜欢紫色」。\n"
@@ -2496,7 +2547,9 @@ def classify_intent(db, client, owner_id, utterance):
         "           「我该说什么」「接下来干嘛」。这类话没有给出新信息，也没要求办新的事。\n"
         "  group_activity: 用户在约一场多个家庭一起做的事，例如「周末三家一起\n"
         "          带孩子出去玩」「两家人聚个餐」。这不是给某一个人准备礼物，\n"
-        "          不要选成一个送礼对象；各家自己给条件。\n"
+        "          不要选成一个送礼对象；各家自己给条件。\n"        "  friend_trip: 用户在约朋友一起旅行或出游，例如「五一约朋友去云南」\n"
+        "          「想和闺蜜去大理几天」。这不是多家庭活动，也不是送礼；\n"
+        "          各人自己给条件，随行说不说由本人定。\n"
         "判断要点：用户是在要求你去办事、给你信息、问进展、问缺什么，\n"
         "还是在说一件已经办完的事后来怎么样了？\n"
         "给办事提条件（例如「300元以内」「别和上次重复」）仍然算 task。\n"
@@ -2518,7 +2571,8 @@ def classify_intent(db, client, owner_id, utterance):
     # 模型明明判对了「多家庭活动」，到这里也会被退回成 task，
     # 于是一句「周末三家一起带孩子出去玩」被当成送礼交办去协商。
     return intent if intent in ("task", "record", "status", "clarify", "followup",
-                               "family_update", "group_activity") else "task"
+                               "family_update", "group_activity",
+                               "friend_trip") else "task"
 
 
 def _pending_clarify(db, owner_id):
@@ -6776,6 +6830,56 @@ FRIEND_TRIP_MARKERS = ("朋友", "旅行", "旅游", "度假", "出游", "想去
                        "一起去玩", "约朋友", "闺蜜", "哥们", "老同学", "驴友")
 FAMILY_TRIP_MARKERS = ("几家", "多少个家庭", "多少户", "家庭", "带孩子", "带娃", "遛娃")
 GIFTING_MARKERS = ("礼物", "送礼", "买给", "生日礼", "买什么", "回礼", "还礼")
+
+
+def start_friend_trip(db, client, owner_id, utterance):
+    """从一句话直接开一场朋友旅行草稿，复用多方协调引擎。
+
+    和 start_group_activity 的分工：那一个建 kind=group_activity，条件字段用
+    家庭活动那套（时间/地点/活动总预算/孩子安排…）；这一个建 kind=friend_trip，
+    用朋友旅行那套（时间/目的地/假期长度/人均预算/住宿标准/能否带伴侣…）。
+    两家共用的规则一条不减：各家只补自己的条件、代表审阅不算本人接受、
+    同一版本才计数、条件变了旧接受失效、未授权数据不进提示词。
+
+    不做的事：不替朋友决定来不来，不把「人均预算」当成某人自己的上限，
+    也不因为说了「朋友」就假设有几个家庭。
+    """
+    text = (utterance or "").strip()
+    title = text[:120] or "朋友旅行"
+    reused = find_open_plan(db, owner_id, title) is not None
+    plan_id = create_plan(db, owner_id, title, text, kind="friend_trip")
+    cap = extract_own_cap(text)
+    conditions = {}
+    if cap:
+        # 朋友旅行场景里，本人这一方的上限键是「本人预算上限」，不是家庭活动的
+        # 「本人出资上限」；两者不是一个数，也不能互相顶替。
+        conditions["本人预算上限"] = cap
+    mine = db.row("SELECT participant_id FROM plan_participant WHERE plan_id=? AND owner_id=?",
+                  (plan_id, owner_id))
+    if mine is None:
+        add_plan_participant(db, plan_id, owner_id, "我家", conditions, True,
+                             role="self")
+    elif cap:
+        cur = db.row("SELECT conditions_json FROM plan_participant"
+                     " WHERE plan_id=? AND owner_id=?", (plan_id, owner_id))
+        have = json.loads(cur["conditions_json"] or "{}")
+        if "本人预算上限" not in have:
+            have["本人预算上限"] = cap
+            db.execute("UPDATE plan_participant SET conditions_json=? WHERE plan_id=?"
+                       " AND owner_id=?",
+                       (json.dumps(have, ensure_ascii=False), plan_id, owner_id))
+    # 随行由本人自己决定说不说：这里只把「可以说」这件事讲清，
+    # 不替他填任何人。真正声明随行走 /api/participation/trip-party。
+    reply = (
+        "这件事按朋友旅行记下了。各家自己补条件：时间、目的地、假期长度、"
+        "人均预算、住宿标准、能否带伴侣、忌口或体力，都能各说各的。"
+        + ("你说的「%s」记在**本人预算上限**里，不是你替大家定的人均预算。" % cap
+           if cap else "")
+        + "想说自己这边几个人、随行是谁，在参与页声明；没说就只记你这一方。"
+        + "带伴侣、不带伴侣都行，由各人自己讲。"
+    )
+    return {"plan_id": plan_id, "reused": reused, "title": title,
+            "own_cap": cap, "reply": reply, "companions": []}
 
 
 def friend_trip_intent(text):

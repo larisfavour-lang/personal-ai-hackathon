@@ -183,20 +183,6 @@ details[open] summary::before{transform:rotate(90deg)}
 /* ---------- 底部输入 ---------- */
 /* 对话输入区的附件入口（t61）：「+」挂在输入框下边缘，麦克风在发送箭头左边。
    都不挤占打字宽度——「+」是小圆钮压在边框上，麦克风只比箭头宽一点。 */
-/* 「+」挂在输入框的下边缘、靠左，压在边框上：它是「挂在这个输入框上的附加动作」，
-   不占打字宽度。绝对定位到 composer（sticky 本身就是定位祖先），
-   文本框相应留出左侧内边距，字不会钻到按钮底下。 */
-.composer .attach{
-  position:absolute;left:12px;bottom:calc(env(safe-area-inset-bottom,0px) + 16px);
-  z-index:5;width:32px;height:32px;border-radius:999px;
-  border:1px solid var(--line-2);background:var(--surface);color:var(--ink-2);
-  font-size:19px;line-height:1;cursor:pointer;padding:0}
-.composer .mic{
-  flex:0 0 auto;width:38px;height:38px;margin-bottom:4px;border-radius:999px;
-  border:1px solid var(--line-2);background:var(--surface);color:var(--ink-2);
-  font-size:15px;line-height:1;cursor:pointer;padding:0}
-.composer .attach[aria-expanded="true"]{background:var(--accent-soft);
-  border-color:var(--accent);color:var(--ink)}
 /* 预留设备占位（t67/t68）：虚线框 + 「建设中／未接入」标，无可点按钮。
    做成能点的样子会让人以为硬件已打通——问卷提交后不能改，所以一眼就要看出是预告。 */
 .reserved-tag{font-size:11.5px;color:var(--ink-3);border:1px solid var(--line-2);
@@ -241,21 +227,48 @@ details[open] summary::before{transform:rotate(90deg)}
   padding:var(--space-2) var(--space-4) calc(env(safe-area-inset-bottom,0px) + var(--space-2));
   background:var(--paper);
   border-top:1px solid var(--line);
-  display:flex;gap:var(--space-2);align-items:flex-end;
 }
+/* 一条圆角栏装下所有控件：+ 在左端（视觉上挂在输入框下缘）、文本框占中间、
+   麦克风与发送在右端。文本框不再自带边框——它在栏里，边框由栏给，
+   这样就摆脱了「+ 压边框 → 文本框常驻一大块左侧内边距让字」的坑。 */
+.composer-bar{
+  display:flex;align-items:flex-end;gap:6px;
+  padding:5px 6px 5px 5px;
+  border:1px solid var(--field-line);border-radius:22px;
+  background:var(--surface);
+}
+.composer-bar:focus-within{border-color:var(--accent)}
+/* 栏内图标按钮：三个（+／麦克风／发送）同一尺寸同一视觉语言。
+   原先 + 与麦克风是 38px、发送是 44px，且麦克风用 emoji、其余用字符，
+   大小不一还混着两种图标风格。 */
+.cbtn{
+  /* 三个控件同一尺寸同一触控标准。全局 button 有 min-height:44px，
+     这里显式写全，不靠覆盖，免得实际尺寸和预期不符。 */
+  flex:none;width:44px;height:44px;min-height:44px;border:none;border-radius:50%;
+  background:transparent;color:var(--ink-2);cursor:pointer;padding:0;
+  display:grid;place-items:center;
+}
+.cbtn svg{width:19px;height:19px;display:block}
+.cbtn:hover{background:var(--paper-2);color:var(--ink)}
+.cbtn:active{background:var(--accent-soft)}
+.cbtn[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent)}
+.cbtn[disabled]{opacity:.45;cursor:not-allowed}
+.cbtn[disabled]:hover{background:transparent;color:var(--ink-2)}
 .composer textarea{
-  flex:1;min-width:0;resize:none;border:1px solid var(--field-line);border-radius:12px;
-  /* 左下角压着「+」，留出左侧内边距免得字钻到按钮底下。 */
-  padding:11px 14px 11px 46px;font:inherit;font-size:16px;line-height:1.5;background:var(--surface);
-  max-height:132px;min-height:44px;
+  flex:1;min-width:0;resize:none;border:none;background:transparent;
+  padding:9px 4px;font:inherit;font-size:16px;line-height:1.5;color:var(--ink);
+  max-height:132px;min-height:36px;
 }
+.composer textarea:focus{outline:none}
 .composer textarea::placeholder{color:var(--ink-3)}
+/* 发送：比另外两个稍大且实心，一望可知是主操作；禁用态不再只靠透明度。 */
 .send{
-  width:44px;height:44px;flex:none;border:none;border-radius:50%;
+  width:44px;height:44px;min-height:44px;flex:none;border:none;border-radius:50%;
   background:var(--accent);color:#fff;cursor:pointer;display:grid;place-items:center;
-  font-size:17px;transition:opacity var(--dur) var(--ease-out);
+  transition:opacity var(--dur) var(--ease-out);
 }
-.send[disabled]{opacity:.4;cursor:not-allowed}
+.send svg{width:18px;height:18px;display:block}
+.send[disabled]{opacity:.35;cursor:not-allowed}
 .send:not([disabled]):active{transform:scale(.94)}
 .quick{display:flex;gap:var(--space-2);padding:0 var(--space-4) var(--space-2);
   overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
@@ -533,16 +546,35 @@ button:active:not(:disabled){transform:translateY(1px)}
   <!-- 图进草稿后的二选一（与资料库一致）。 -->
   <div class="chat-pick" id="chat-pick"></div>
 
+  <!-- 「+」挂在输入框下边缘：不是左侧独立一列（那会被当成又一个输入区、
+       和文本框抢宽度），也不是压在边框上（原先那样做，文本框被迫常驻一大块
+       左侧内边距让字，左边永远凹进去一块）。现在 +／文本框／麦克风／发送
+       同在一条圆角栏里，+ 是栏内左端第一个元素，视觉上挂在输入框下缘。 -->
   <form class="composer" id="composer">
-    <button type="button" class="attach" id="chat-attach" aria-expanded="false"
-      aria-controls="chat-attach-panel" aria-label="添加图片或视频附件">+</button>
-    <label class="sr" for="input">对我说</label>
-    <textarea id="input" rows="1" placeholder="有什么想交给我？"
-      enterkeyhint="send" autocomplete="off"></textarea>
-    <button type="button" class="mic" id="chat-voice" aria-label="按住说话"
-      title="按住说话，浏览器把话转成文字进输入框">🎤</button>
-    <button class="send" id="send" type="submit" aria-label="发送" disabled>↑</button>
-    <!-- 「+」点开后的附件面板，挂在输入框下边缘往上弹。 -->
+    <div class="composer-bar">
+      <button type="button" class="cbtn" id="chat-attach" aria-expanded="false"
+        aria-controls="chat-attach-panel" aria-label="添加图片或视频附件">
+        <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+          <path d="M10 4v12M4 10h12" fill="none" stroke="currentColor"
+            stroke-width="1.8" stroke-linecap="round"/></svg></button>
+      <label class="sr" for="input">对我说</label>
+      <textarea id="input" rows="1" placeholder="有什么想交给我？"
+        enterkeyhint="send" autocomplete="off"></textarea>
+      <button type="button" class="cbtn" id="chat-voice" aria-label="按住说话"
+        title="按住说话，浏览器把话转成文字进输入框">
+        <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+          <rect x="7.2" y="2.6" width="5.6" height="9.2" rx="2.8"
+            fill="none" stroke="currentColor" stroke-width="1.6"/>
+          <path d="M4.6 9.4a5.4 5.4 0 0 0 10.8 0M10 14.8v2.6"
+            fill="none" stroke="currentColor" stroke-width="1.6"
+            stroke-linecap="round"/></svg></button>
+      <button class="send" id="send" type="submit" aria-label="发送" disabled>
+        <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+          <path d="M10 16V4.6M4.8 9.8 10 4.6l5.2 5.2" fill="none"
+            stroke="currentColor" stroke-width="1.9" stroke-linecap="round"
+            stroke-linejoin="round"/></svg></button>
+    </div>
+    <!-- 「+」点开后的附件面板，从圆角栏下缘往上弹。 -->
     <div class="attach-panel" id="chat-attach-panel" hidden>
       <button type="button" class="attach-item" id="chat-photo">
         <b>图片</b><span>选一张图，再决定识别文字还是只作附件</span></button>
@@ -1191,7 +1223,8 @@ function todoWhy(m){
     return "对方提了个新方案，要你定";
   }
   if(m.stage === "needs_renegotiation"){
-    return m.outcome || "有条记录刚被更正，方案要重排";
+    /* 原写「有条记录刚被更正，方案要重排」——不下结论，说清这一版基于什么。 */
+    return m.outcome || "有条记录刚被更正，这一版是按更正前的值排的";
   }
   if(m.stage === "negotiating"){
     return "正在和对方核实";
@@ -1421,6 +1454,17 @@ async function renderSidePlans(){
   lastPlans = plans;
   // 共同事项不再单独渲染：数据已经并进「事项」那一段(见 renderSide)，
   // 这里再渲染一次同一件事会出现两遍。lastPlans 仍要更新，首屏共用。
+}
+
+/* 事项状态变更后，把所有看这件事的地方一次刷齐。
+   原先各处只调 renderSidePlans()，而 renderTodo（首屏「需要你处理」）只在
+   renderSide 里被调用，于是改完条件、重排、表态之后：弹层是新的、侧栏「在等的事」
+   是旧的、首屏还是旧的。用户刚改完条件，看不到别处跟上，会以为没保存成功。
+   顺序有讲究：先 renderSidePlans 更新 lastPlans，renderSide 里的 renderTodo
+   才拿得到新数据。 */
+async function refreshMatterViews(){
+  await renderSidePlans();
+  await renderSide();
 }
 
 /* ---------- 人物搜索与分组 ---------- */
@@ -1678,7 +1722,33 @@ function wireChatInputs(){
   }
   if(photo) photo.onclick = () => { chatHint(""); $("chat-photo-input").click(); };
   if(video) video.onclick = () => { chatHint(""); $("chat-video-input").click(); };
+  /* 浏览器不提供 SpeechRecognition 时（最常见的是用局域网 http:// 打开——
+     非安全源，Chrome 直接不给这个 API），按钮不能看着能点、一按才说不行。
+     这里提前判定：不可用就置 disabled、换一句 title 说清为什么、并给可见提示，
+     让用户在点之前就知道，而不是点了之后收到一句失败。 */
   if(voice && !voice.cbPushToTalk){
+    /* 判据必须是「有 API」且「在安全上下文里」两条同时成立。
+       只在 http://<局域网IP> 下打开时，window.webkitSpeechRecognition 对象**仍然存在**，
+       但 Chrome 按规范拒绝在非安全上下文里真的用它——点了才在运行时失败，
+       用户看到的是「按钮能点，一按就说没接上」。所以光判 API 在不在不够，
+       必须连 isSecureContext 一起判，在点之前就把按钮停掉。 */
+    const hasAPI = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+    const secure = window.isSecureContext !== false;
+    if(!hasAPI || !secure){
+      voice.disabled = true;
+      voice.dataset.forceDisabled = "1";
+      voice.setAttribute("aria-disabled", "true");
+      voice.title = !secure
+        ? "语音识别要用 https:// 或本机 localhost 打开才可用；现在这样打开，浏览器不提供这个能力"
+        : "这个浏览器不支持语音识别，可以打字或用输入法的语音转文字";
+      chatHint(!secure
+        ? "语音识别需要安全上下文。在电脑本机用 http://localhost:8000 打开就能用；"
+          + "从手机连局域网 IP 打开时这一项不可用，可以打字，"
+          + "或用输入法的语音转文字说完粘贴进来。"
+        : "这个浏览器不支持语音识别，可以打字，或用输入法的语音转文字粘贴进来。");
+    }
+  }
+  if(voice && !voice.cbPushToTalk && !voice.disabled){
     attachPushToTalk(voice, {
       hint: (t) => chatHint(t),
       status: (t) => setStatus(t),
@@ -1690,8 +1760,8 @@ function wireChatInputs(){
         box.dispatchEvent(new Event("input", {bubbles: true}));
       },
       addKind: () => {},
-      // 麦克风是图标按钮：复位时不能把图标换成文字，否则按钮会忽大忽小。
-      label: "🎤",
+      // 图标按钮：label 只作无障碍名，不回写进按钮，图标不会忽大忽小。
+      label: "按住说话",
     });
   }
   const pi = $("chat-photo-input");
@@ -1802,7 +1872,7 @@ async function send(text, opts){
       stream.appendChild(box);
       stream.scrollTop = stream.scrollHeight;
       await renderStream();
-      await renderSidePlans();
+      await refreshMatterViews();
       return;
     }
     if(said.kind === "clarify"){
@@ -2275,8 +2345,12 @@ async function openPlan(planId){
   h += '<div class="sub">' + esc(d.utterance || "") + '</div>';
 
   // 当前状态：说清是约定、还在等谁，还是条件变了要重排。
+  /* 原写「有条件变了，方案要重排」——说得过于绝对。参与者改的不一定是
+     影响事情本身的条件（比如把「河边公园」换成「附近公园」），
+     也可能只是补一个细节。改成说清这一版是基于什么条件排的，
+     要不要重排交给用户判断，文案不替他下结论。 */
   const tag = d.needs_replan
-    ? "有条件变了，方案要重排"
+    ? "有条件更新过，这一版是按更新前的条件排的"
     : (d.agreed ? "各方已约定第 " + d.current_version + " 版"
                 : "还在等：" + (d.waiting_on || []).join("、"));
   h += '<div style="margin:10px 0 4px"><span class="state '
@@ -2444,9 +2518,19 @@ async function openPlan(planId){
          + '）已接受当前版本。</div></section>';
     }
     if(d.needs_replan){
-      h += '<section><div class="notice">有条件刚更新，方案要重排后才能确认。'
-         + '重排会按各家当前条件出新版，各家再重新表态。'
-         + '重排失败可以重试，失败时不落新版本。</div></section>';
+      /* 原写「有条件刚更新，方案要重排后才能确认」——把重排说成唯一出路。
+        实际参与者常改的是不影响事情进行的小变量。改成说清现状 + 给两条路：
+        多数情况按新条件重排更稳；如果改的确实不影响这一版，也可以直接表态，
+        但要说清「这一版没包含刚更新的条件」，让用户在知情下选。 */
+      h += '<section><div class="notice">有条件在排完这一版之后更新过，'
+         + '所以这一版里没有刚改的那部分。</div>'
+         + '<div class="meta" style="margin-top:6px">两条路：</div>'
+         + '<div class="meta">· 按各家当前条件重排一版，再让大家对新版表态——'
+         + '改动涉及时间、地点、预算或出席时走这条。</div>'
+         + '<div class="meta">· 改的确实不影响这一版，也可以直接对当前版本表态，'
+         + '但那一版里没有刚更新的条件，这点在对表态里会写清楚。</div>'
+         + '<div class="meta" style="margin-top:6px">重排失败可以重试，'
+         + '失败时不落新版本，这一版还在。</div></section>';
     }
   }
 
@@ -2792,7 +2876,7 @@ $("btn-new-plan").addEventListener("click", () => {
         await post("/api/plan/" + created.plan_id + "/propose", {});
       }
       await openPlan(created.plan_id);
-      renderSidePlans();
+      refreshMatterViews();
     }catch(err){
       btn.disabled = false;
       btn.textContent = "创建并生成第一版方案";
@@ -2842,7 +2926,7 @@ $("sheet").addEventListener("click", async (e) => {
       owner_id: owner, conditions: conds, reason: "本人在手机端改条件",
     });
     await openPlan(planId);
-    renderSidePlans();
+    refreshMatterViews();
   }catch(err){
     saveBtn.disabled = false;
     saveBtn.textContent = "保存条件";
@@ -2861,7 +2945,7 @@ $("sheet").addEventListener("click", async (e) => {
   try{
     await post("/api/plan/" + planId + "/replan", {});
     await openPlan(planId);
-    renderSidePlans();
+    refreshMatterViews();
   }catch(err){
     btn.disabled = false;
     btn.textContent = "重排方案（可重试）";
@@ -2884,7 +2968,7 @@ $("sheet").addEventListener("click", async (e) => {
       version: parseInt(btn.dataset.planVersion, 10),
     });
     await openPlan(planId);
-    renderSidePlans();
+    refreshMatterViews();
   }catch(err){
     btn.disabled = false;
     btn.textContent = "让代表先看这一版";
@@ -3076,7 +3160,11 @@ function renderNoteAttachments(){
   if(!box || !noteCtx) return;
   const items = noteCtx.attachments;
   if(!items.length){
-    box.innerHTML = '<div class="sub" style="margin:0">还没有图片。</div>';
+    /* 原写「还没有图片。」——没说这是什么地方、下一步能干什么。
+       改成说清这里是配图区、怎么加，别让人对着一个空句子猜。 */
+    box.innerHTML = '<div class="sub" style="margin:0">这条资料还没有配图。'
+      + '要加图，点上面的「图片识别」或「加图片」；图会先留在草稿里，'
+      + '由你决定认不识别图里的字。</div>';
     return;
   }
   box.innerHTML = items.map((a, i) =>
@@ -3659,15 +3747,28 @@ function attachPushToTalk(btn, opts){
     const base = baseText() || "";
     target.value = (base ? base + "\n" : "") + said + pending;
   };
+  /* 复位有三件事不能做错：
+     ① 不能把 textContent 覆写成 label——图标按钮里是 SVG，一覆写图标就没了，
+        按钮还会忽大忽小。label 只作为无障碍名（aria-label）。
+     ② 不能无条件 disabled=false——浏览器不提供语音识别时，按钮是**故意**禁用的，
+        这里一复位就把它放回去，用户又看到个能点但一点就失败的按钮。
+     ③ aria-pressed 要回到 false，否则选中态卡住。 */
   const reset = () => {
     holding = false;
-    btn.textContent = label;
-    btn.disabled = false;
+    if(!btn.querySelector("svg") && !btn.dataset.iconBtn){
+      btn.textContent = label;
+    }
+    if(!btn.dataset.forceDisabled){
+      btn.disabled = false;
+    }
     btn.setAttribute("aria-pressed", "false");
   };
+  /* 原先 hint 和 status 各写一句、内容还重复，hint 那句又把原因和两条备选
+     办法串成一长串。改成：status 只说结果，hint 说清下一步怎么做，
+     两处不重复，也不把错误码直接摊给用户。 */
   const fail = (why) => {
-    hint("语音没接上：" + why + "。可以直接打字，或用输入法的语音转文字粘贴进来");
-    status("语音没接上：" + why);
+    status("语音没用上：" + why);
+    hint("可以接着打字；要说话，也可以用输入法的语音转文字，说完粘贴进来。");
     reset();
   };
   const start = async () => {
@@ -3694,7 +3795,11 @@ function attachPushToTalk(btn, opts){
     }
     rec.lang = "zh-CN";
     rec.interimResults = true;      // 边说边显示，说完就能看出对不对
-    rec.continuous = false;
+    /* continuous 必须为 true：按住期间要说一段话，中间换气、停顿都不该结束识别。
+       原先 false，浏览器一遇到停顿就自行 onend，用户按着不动也只录到第一句。
+       光置 true 还不够——Chrome 静音一段时间仍会自己 onend，
+       所以 onend 里只要 holding 还在就重新 start，真正实现「按住持续听」。 */
+    rec.continuous = true;
     holding = true;
     btn.disabled = true;            // 听的过程中不允许再按（防连点送多次）
     btn.setAttribute("aria-pressed", "true");
@@ -3718,6 +3823,12 @@ function attachPushToTalk(btn, opts){
       fail(why);
     };
     rec.onend = () => {
+      /* 松手之前不算结束：浏览器会因静音自行 onend，这时只要用户还按着，
+         就接着识别，已说出的定稿累加不丢。只有用户真松手（holding=false）
+         或出了错，才走收尾。 */
+      if(holding && !rec._stopping){
+        try{ rec.start(); return; }catch(err){ /* 起不来就落到收尾 */ }
+      }
       // 半句没收尾的就地定稿：不丢掉，也不把没说完的话当成完整一句存起来。
       if(pending){ said += pending; pending = ""; }
       if(said){
@@ -3742,7 +3853,9 @@ function attachPushToTalk(btn, opts){
     if(!holding){ reset(); return; }
     holding = false;
     btn.textContent = "正在收尾…";
-    try{ rec && rec.stop(); }catch(err){ reset(); }
+    /* 打个标记再 stop：否则 onend 里看到 holding 已 false 也能正常收尾，
+       但 Chrome 有时在 stop 前就又发一次 onend，标记让意图明确。 */
+    try{ if(rec) rec._stopping = true; rec && rec.stop(); }catch(err){ reset(); }
   };
   btn.addEventListener("pointerdown", (e) => { e.preventDefault(); start(); });
   btn.addEventListener("pointerup", stop);
@@ -4892,7 +5005,7 @@ function renderNotePlanLink(){const d=notePlanDraft,s=d.source;
   $('sheet-body').innerHTML=h;$('sheet').classList.add('open');
   const choice=$('note-plan-choice');function mode(){$('note-plan-new-label').hidden=!!choice.value;}choice.onchange=mode;mode();
   $('note-plan-link').onclick=async()=>{const b=$('note-plan-link');if(b.disabled)return;const selected=[...document.querySelectorAll('[data-note-field]:checked')].map(x=>x.dataset.noteField),planId=choice.value,title=$('note-plan-title').value.trim();if(!planId&&!title){$('note-plan-error').textContent='请给新事项写个标题；资料不用重录。';return;}b.disabled=true;b.textContent='正在关联…';try{const body={event_id:d.eventId,selected_fields:selected,public_conditions:{},publish_confirmed:false};if(d.replace)body.replace_link_id=d.replace;
-    const r=await post(planId?'/api/note/link-plan':'/api/plan/create-with-note',planId?{...body,plan_id:planId}:{...body,title});d.target=planId||r.plan_id||r.plan?.plan_id;if(!d.target)throw new Error('服务没有返回同一事项编号，请核实关联结果');d.selected=selected;d.replace='';renderNotePlanPublish();renderSidePlans();
+    const r=await post(planId?'/api/note/link-plan':'/api/plan/create-with-note',planId?{...body,plan_id:planId}:{...body,title});d.target=planId||r.plan_id||r.plan?.plan_id;if(!d.target)throw new Error('服务没有返回同一事项编号，请核实关联结果');d.selected=selected;d.replace='';renderNotePlanPublish();refreshMatterViews();
   }catch(e){$('note-plan-error').textContent='未关联：'+e.message+'。原文与选择保留，可重试。';b.disabled=false;b.textContent='关联所选资料';}};
 }
 function renderNotePlanPublish(){const d=notePlanDraft;
