@@ -907,13 +907,30 @@ async function render(){
   else await renderPlan();
 }
 
+/* 页签可以直达：地址后面加 #gift 就打开送礼管家，#connectors 打开数据接入。
+   没有这个之前，分享一页只能把人带到默认的学习软件，对方还得自己再点一次；
+   截图和验收也没法固定落在某一个页签上。 */
+const VIEWS = ["study", "plan", "gift", "connectors", "relclass"];
+function viewFromHash(){
+  const h = (location.hash || "").replace(/^#/, "");
+  return VIEWS.indexOf(h) >= 0 ? h : null;
+}
+function showView(next){
+  document.querySelectorAll(".tab").forEach((t) =>
+    t.setAttribute("aria-selected", String(t.dataset.view === next)));
+  view = next;
+  render();
+}
 document.querySelectorAll(".tab").forEach((tab) => {
-  tab.addEventListener("click", () => {
-    document.querySelectorAll(".tab").forEach((t) =>
-      t.setAttribute("aria-selected", String(t === tab)));
-    view = tab.dataset.view;
-    render();
-  });
+  tab.addEventListener("click", () => showView(tab.dataset.view));
+});
+/* 地址里带了页签就先落那个；不带也不改默认。切页签时把页签写回地址，
+   刷新和分享都落在同一处。 */
+const initial = viewFromHash();
+if(initial) showView(initial);
+window.addEventListener("hashchange", () => {
+  const h = viewFromHash();
+  if(h && h !== view) showView(h);
 });
 
 if("serviceWorker" in navigator && window.isSecureContext !== false){
