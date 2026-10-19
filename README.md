@@ -34,28 +34,28 @@
 
 它现在长在手机上，是个网页；桌面上还有个浏览器插件，替你在电脑上填页面。同一份记录两边都用，所以在这边改的，那边接着认。
 
-同一个后台以后还能长成别的样子：系统里的个人助理、单独一个 App、或者让别人写的助理来调用。现在只有网页和插件这两种，后面几种还没做。
+同一个后台以后还能接别的入口：系统里的个人助理、单独一个 App、或者让别人写的助理来调用。现在只有网页和插件这两个入口，后面几种还没做。
 
 ```mermaid
 %%{init: {"theme":"base","themeVariables":{"background":"#f7f6f3","mainBkg":"#eceae4","primaryColor":"#eceae4","primaryTextColor":"#20242b","primaryBorderColor":"#34463f","secondaryColor":"#eef1ee","secondaryBorderColor":"#8a9a92","tertiaryColor":"#f7f6f3","tertiaryBorderColor":"#d9d6cf","lineColor":"#5b6068","textColor":"#20242b","fontFamily":"PingFang SC, Microsoft YaHei, sans-serif","fontSize":"15px","clusterBkg":"#f7f6f3","clusterBorder":"#d9d6cf","edgeLabelBackground":"#f7f6f3","nodeBorder":"#34463f","actorBkg":"#eceae4","actorBorder":"#34463f","actorTextColor":"#20242b","signalColor":"#5b6068","signalTextColor":"#20242b","noteBkgColor":"#eef1ee","noteTextColor":"#20242b","noteBorderColor":"#8a9a92","labelBoxBkgColor":"#eceae4","labelBoxBorderColor":"#34463f","labelTextColor":"#20242b","sequenceNumberColor":"#f7f6f3","activationBkgColor":"#eef1ee","activationBorderColor":"#8a9a92"}}}%%
 flowchart TB
-  subgraph NOW["现在有的两种"]
+  subgraph NOW["现在已经能用的入口"]
     direction LR
     W["手机网页<br/>对话 · 资料 · 事项 · 小应用"]
     EXT["桌面浏览器插件<br/>替你在电脑上填页面"]
   end
-  subgraph LATER["同一份记录以后还能长成"]
+  subgraph LATER["同一个后台以后还能接的入口"]
     direction LR
     S1["系统里的个人助理"]
     S2["单独一个 App"]
     S3["让别人写的助理来调用"]
   end
-  DATA["同一份记录<br/>谁和谁什么关系 · 哪条给了谁看 · 一件事谈到哪一步 · 谁同意过哪一版"]
+  DATA["共用的那份记录<br/>谁和谁什么关系 · 哪条给了谁看 · 一件事谈到哪一步 · 谁同意过哪一版"]
   NOW --> DATA
   LATER --> DATA
 ```
 
-| 现在有的 | 能干什么 |
+| 入口 | 能干什么 |
 |---|---|
 | 手机网页 | 对话交办、资料库、事项跟进；小应用页里有学习软件、周末安排、送礼管家，也能接自己的应用和设备 |
 | 桌面浏览器插件 | 在电脑上按你授权的字段代填页面，回执回到同一件事 |
