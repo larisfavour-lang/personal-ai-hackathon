@@ -20,7 +20,7 @@
 
 一个人的情况要跟不同的人反复讲。跟老师说孩子这周练了多久琴，跟另一个家长再讲一遍；跟同事交代过的背景，换个项目从头再说；给朋友帮过忙，下次他换了个人对接，你还得再讲一次。过两周自己也要重新回忆。
 
-几个人约一件事，没有版本。群里接龙，有人说了周六可以，后来改成周六上午，之前那句“可以”还作不作数只能靠记忆。约旅行、排值班、合伙做点什么都一样。
+几个人约一件事缺少记录。群里接龙，有人说了周六可以，后来改成周六上午，先前那次同意是否还有效只能靠记忆。约旅行、排值班、合伙做点什么都一样。
 
 办一件事要查历史。上次送了什么、穿多大码、地址填的哪个、跟对方谈到哪一步，散在聊天记录、相册和收藏夹里，用的时候靠翻。
 
@@ -28,7 +28,7 @@
 
 里面有手机优先的对话页、资料库，一个「小应用 · API · 连接器」页（学习软件／周末安排／送礼管家三个轻量应用，加数据接入与关系分类），还有一个 Chrome 插件。送礼和商店代填是另外的模拟用例，跟家庭活动不是一回事。
 
-## 这是什么
+## 产品定位
 
 一个记着你身边人和身边事的助理。它替你办三件事：把说过的情况存下来，下次不用重讲；把约的事记清谁同意了哪一版，改过之后旧的不算；把送谁的什么都记牢，不用翻聊天记录。
 
@@ -62,9 +62,9 @@ flowchart TB
 
 小应用、数据接入、连接器都是网页里的页面，是同一些记录在不同事情上的用法。
 
-## 核心：几个人约一件事
+## 核心：多方协商
 
-约一件事最烦的不是没人答应，是答应过又改了，谁也说不清先头那句还作不作数。这里把它拆开记：每一版方案都有编号，谁同意了哪一版记在哪儿；改过条件之后，旧的那一版当场不算数，大家对新的一版重新说话。
+约一件事的难处不在没有人答应，而在答应之后又改了，先前那次同意是否还有效无从查证。这里把每次约定拆开记录：每一版都有编号，谁同意了哪一版分别记下；条件变更后，旧的一版立即失效，各方对新的一版重新表态。
 
 ```mermaid
 %%{init: {"theme":"base","themeVariables":{"background":"#f7f6f3","mainBkg":"#eceae4","primaryColor":"#eceae4","primaryTextColor":"#20242b","primaryBorderColor":"#34463f","secondaryColor":"#eef1ee","secondaryBorderColor":"#8a9a92","tertiaryColor":"#f7f6f3","tertiaryBorderColor":"#d9d6cf","lineColor":"#5b6068","textColor":"#20242b","fontFamily":"PingFang SC, Microsoft YaHei, sans-serif","fontSize":"15px","clusterBkg":"#f7f6f3","clusterBorder":"#d9d6cf","edgeLabelBackground":"#f7f6f3","nodeBorder":"#34463f","actorBkg":"#eceae4","actorBorder":"#34463f","actorTextColor":"#20242b","signalColor":"#5b6068","signalTextColor":"#20242b","noteBkgColor":"#eef1ee","noteTextColor":"#20242b","noteBorderColor":"#8a9a92","labelBoxBkgColor":"#eceae4","labelBoxBorderColor":"#34463f","labelTextColor":"#20242b","sequenceNumberColor":"#f7f6f3","activationBkgColor":"#eef1ee","activationBorderColor":"#8a9a92"}}}%%
@@ -92,10 +92,10 @@ sequenceDiagram
 三条规矩：
 
 - 助理以你的名义先看一版，只是建议。要你本人点了头才算。
-- 同一个版本才作数。改过条件，先前的同意当场失效。
+- 只有当前这一版的同意有效。条件变更后，先前的同意立即失效。
 - 你没让看的资料，助理拿去用的时候连提都不会提。
 
-### 条件改了，不一定都要重排
+### 条件变更后的处理
 
 ```mermaid
 %%{init: {"theme":"base","themeVariables":{"background":"#f7f6f3","mainBkg":"#eceae4","primaryColor":"#eceae4","primaryTextColor":"#20242b","primaryBorderColor":"#34463f","secondaryColor":"#eef1ee","secondaryBorderColor":"#8a9a92","tertiaryColor":"#f7f6f3","tertiaryBorderColor":"#d9d6cf","lineColor":"#5b6068","textColor":"#20242b","fontFamily":"PingFang SC, Microsoft YaHei, sans-serif","fontSize":"15px","clusterBkg":"#f7f6f3","clusterBorder":"#d9d6cf","edgeLabelBackground":"#f7f6f3","nodeBorder":"#34463f","actorBkg":"#eceae4","actorBorder":"#34463f","actorTextColor":"#20242b","signalColor":"#5b6068","signalTextColor":"#20242b","noteBkgColor":"#eef1ee","noteTextColor":"#20242b","noteBorderColor":"#8a9a92","labelBoxBkgColor":"#eceae4","labelBoxBorderColor":"#34463f","labelTextColor":"#20242b","sequenceNumberColor":"#f7f6f3","activationBkgColor":"#eef1ee","activationBorderColor":"#8a9a92"}}}%%
@@ -106,7 +106,7 @@ flowchart TD
   Q -->|"只补一句备注"| T["什么都不影响<br/>按原计划继续"]
 ```
 
-### 录入方式灵活，哪条路都不白走
+### 录入方式
 
 打字、语音、拍图、从图里认字，四种都能进同一条草稿。草稿在离开设备之前一直停在本机，你可以改、可以删、可以放着以后再来；每一次要不要送模型，都由你点那一下决定。
 
@@ -160,7 +160,7 @@ python start_server.py 8000
 
 普通用户用已经启动好的服务就行，不用配模型，也不用切换身份。密钥存在本地运行库里，不要随源码分享。
 
-## 从一件家庭事项开始
+## 使用示例：家庭活动
 
 几个家庭一起办事，各人把自己的情况说一次就存下。约家庭聚会、几家一起出游、合伙做点什么都行：时间、预算、孩子来不来，各家补一次；之后助理记着，你这边随时看得到还差谁、差什么，不用挨个问。
 
@@ -179,7 +179,7 @@ python start_server.py 8000
 
 资料保存后选「用于家庭活动」，默认一样都不外传。先关联你自己的来源，再挑核对过的短字段原值，确认别家可见才公开。改过或撤过之后，先前的同意失效，要重新选、重新公开、重新排。
 
-## 录入、核对与再次使用
+## 资料录入与复用
 
 从「☰ → 资料库 → 添加资料」进去。「记什么」那个框打开就能写，不用先拍照也不用先选人。
 
@@ -197,7 +197,7 @@ python start_server.py 8000
 
 学习记录和周末安排这两个视图用的是作品内的测试数据，不是接进了真实的学校软件、微信或手表。
 
-## Chrome 插件：电脑上的那双手
+## Chrome 插件：电脑端的执行
 
 手机上交办的事，最后要落在某个网页上。插件就是这双手：它在桌面 Chrome/Edge 里代替你操作页面，把同一件事的参数填进去，再把页面实际值读回来。
 
@@ -225,11 +225,11 @@ python -m http.server 9000 --bind 127.0.0.1 \
 
 演示里的人物、关系、商品都是编的，购买、支付、物流全是 `simulated`，没有真实交易。文字和你选定识别的图会送到运行者配的模型服务；看附件的权限和给模型处理用的授权是两套检查。请只用不敏感的编造数据演示。
 
-## 验证到哪一步
+## 验证范围
 
 这个版本实际跑过的：
 
-- 家庭主线已通过：拍图识字进正文、按改过的来源重排方案、一次性邀请、来宾自称并补条件、发起人认可、双方各自对当前版本点头。最后没有全员约定，结果显示没有全员约定。
+- 家庭主线已通过：拍图识字进正文、按改过的来源重排方案、一次性邀请、来宾自称并补条件、发起人认可、双方各自对当前版本表态。最后没有全员约定，结果显示没有全员约定。
 - 三方协商已通过，包含改条件后重排、旧的接受失效。
 - 插件契约、接口该拒绝的路径、资料关联链已通过。
 - 安卓真机跑过：相机实拍、手指裁剪、真麦克风、重开继续、手机同事项回执，由用户本人在自己设备上验过。
@@ -248,13 +248,13 @@ python -m http.server 9000 --bind 127.0.0.1 \
 
 源码只对启动管理器的一行模块 docstring 做了泛化，运行逻辑没动，其余文件按原字节选。ZIP 和公开快照是同一套分发字节，逐文件的原／分发 SHA-256 记在独立的交付映射里。
 
-## 语音与其他边界
+## 已知边界
 
-服务端语音转写直连 Step，不经本地代理。本地代理只放行 `image_url` 一种 content part，音频 part 在入站解析时就被丢掉，路由表里也没有 `/v1/audio/*`。实测可用的组合是 `stepaudio-2.5-chat` 加 `input_audio`，模型 ID 不带 `step/` 前缀；带前缀返回 `model_invalid`，那个前缀是代理自己加的命名空间。明细见[语音核查摘要](<docs/delivery/verification-summary.md>)。
+服务端语音转写需要配一个密钥，配好后可用。没配时接口如实返回不可用与原因，并给出打字或输入法转文字的替代办法。转写走的是 Step 的音频对话模型，实现细节与踩坑记录见[语音核查摘要](<docs/delivery/verification-summary.md>)。
 
-「说一段」走浏览器自带的 SpeechRecognition，不经过本作品服务端。它受设备、权限和**安全上下文**三重限制：用 `http://localhost` 或 `https://` 打开时可用；用局域网 IP 的 `http://` 打开时不可用，这时界面会提前把按钮停用并写清原因和替代办法，不等用户点了才失败。按住期间持续识别，中间换气停顿不会中断，松手才停。这一步只验了服务接通与返回，真麦克风下的连续说话还没实测。
+浏览器识别的「说一段」不经过本作品服务端，可用范围由浏览器决定：本机 `http://localhost` 或 `https://` 打开时可用，手机连局域网 IP 打开时浏览器不提供这个能力，按钮会提前停用并说明原因。按住期间持续识别，换气停顿不中断，松手才停。真麦克风下的连续说话还没实测。
 
-Step 这一环节的证据是配置标签和能核对的实际调用范围。真实电商、群消息发送、外部 Agent 接力、语义检索、公开多用户认证都没做。
+Step 这一环节的证据到配置标签和能核对的实际调用范围为止。真实电商、群消息发送、外部 Agent 接力、语义检索、公开多用户认证都没做。
 
 ## 代码结构
 
