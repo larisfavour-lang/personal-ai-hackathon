@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field
 from . import agents
 from . import db as dbm
 from . import service
+from . import model_client
 from .model_client import ModelClient
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -906,11 +907,18 @@ class VoiceTranscribeBody(BaseModel):
 
 @app.post("/api/voice/transcribe")
 def api_voice_transcribe(body: VoiceTranscribeBody):
-    """语音转文字。当前环境没有可用转写链路，如实返回不可用。"""
-    return {"available": False, "text": "",
-            "reason": "当前模型接口没有可用的中文语音转写能力",
-            "hint": "可以先直接打字，或用手机输入法自带的语音转文字，"
-                    "转好后粘贴进来；这条链接通后这里会自动变成可转写。"}
+    """语音转文字。走 Step 的 audio chat 模型，直连，不经本地代理。
+
+    本地代理 opencodex 只放行 image_url 一种 content part，音频在入站解析时就被丢掉，
+    所以这里直连 Step。未配 PA_ASR_API_KEY 或调用失败时，如实返回不可用与原因，
+    不把空结果冒充成功，也不编一段文字当转写。
+    """
+    ok, text, reason = model_client.transcribe_audio(body.audio_b64, body.media_type)
+    if not ok:
+        return {"available": False, "text": "", "reason": reason,
+                "hint": "可以先直接打字，或用手机输入法自带的语音转文字，"
+                        "转好后粘贴进来。转写服务可用时这里会自动变成可转写。"}
+    return {"available": True, "text": text, "reason": "", "hint": ""}
 
 
 @app.get("/api/event/{event_id}/attachments")

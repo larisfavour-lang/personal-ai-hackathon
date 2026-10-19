@@ -17,7 +17,9 @@ PA_MODEL_NAME="你的模型名" PA_MODEL_API_KEY="你的密钥" \
 python start_server.py 8000
 ```
 
-OpenAI 兼容接口须支持聊天，图片识别还需支持 `image_url` 多模态。运行者自行确认费用与隐私条款。已有本机代理时可直接执行 `python start_server.py 8000`，默认接口为 `http://127.0.0.1:10100/v1`，默认模型标签为 `step/step-5-preview`；别的电脑没有该代理，不能照抄默认配置就认为模型可用。
+OpenAI 兼容接口须支持聊天，图片识别还需支持 `image_url` 多模态。运行者自行确认费用与隐私条款。
+
+语音转写单独配置，默认直连 Step：`PA_ASR_BASE_URL` 默认 `https://api.stepfun.com/step_plan/v1`，`PA_ASR_MODEL` 默认 `stepaudio-2.5-chat`，密钥读 `PA_ASR_API_KEY`，未设时回落 `PA_MODEL_API_KEY`。它不经本地代理——代理只放行 `image_url` 一种 content part，音频 part 在入站解析时就被丢掉。不配密钥时 `/api/voice/transcribe` 如实返回不可用与原因，界面给出打字或输入法转文字的替代办法。已有本机代理时可直接执行 `python start_server.py 8000`，默认接口为 `http://127.0.0.1:10100/v1`，默认模型标签为 `step/step-5-preview`；别的电脑没有该代理，不能照抄默认配置就认为模型可用。
 
 启动打印本机和当前局域网地址。电脑用 `http://127.0.0.1:8000`，手机用同网地址。服务默认监听 `0.0.0.0`；仅本机使用时设 `PA_BIND=127.0.0.1`。`PA_LAN_IP` 可指定展示的局域网 IP，不改变监听或认证。正式 Chrome 插件固定站点权限包含本机 8000／8097／9000／8098；应用换端口不代表插件会自动跟随，示例统一使用 8000。
 

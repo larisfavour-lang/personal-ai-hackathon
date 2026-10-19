@@ -12,6 +12,7 @@
   <img src="docs/images/screen-note.png" width="185" alt="输入框旁的附件面板：图片两步选择、视频作附件">
   <img src="docs/images/screen-settings.png" width="185" alt="不用配，扫码就连：模型默认已配好，预留设备标注建设中">
   <img src="docs/images/screen-invite.png" width="185" alt="一次性邀请：对方自称并只填自己的条件">
+  <img src="docs/images/screen-gift.png" width="185" alt="送礼管家：私有档案，偏好、尺码、上次送过什么都记在自己名下">
 </p>
 
 
@@ -29,34 +30,33 @@
 
 ## 这是什么
 
-人物关系、授权范围、事项版本、执行回执由同一份后端状态持有，三种界面各自提供适合自己任务的形态。
-核心规则只有一条：**知道一个人的情况，不等于可以把他的信息说出去。**
+要解决的是三件事：同一个人的情况跟不同的人反复讲；几个人约一件事没有版本，改了口径对不上；换个页面办同一件事，条件从头再填。
 
 ```mermaid
 %%{init: {"theme":"base","themeVariables":{"background":"#f7f6f3","mainBkg":"#eceae4","primaryColor":"#eceae4","primaryTextColor":"#20242b","primaryBorderColor":"#34463f","secondaryColor":"#eef1ee","secondaryBorderColor":"#8a9a92","tertiaryColor":"#f7f6f3","tertiaryBorderColor":"#d9d6cf","lineColor":"#5b6068","textColor":"#20242b","fontFamily":"PingFang SC, Microsoft YaHei, sans-serif","fontSize":"15px","clusterBkg":"#f7f6f3","clusterBorder":"#d9d6cf","edgeLabelBackground":"#f7f6f3","nodeBorder":"#34463f","actorBkg":"#eceae4","actorBorder":"#34463f","actorTextColor":"#20242b","signalColor":"#5b6068","signalTextColor":"#20242b","noteBkgColor":"#eef1ee","noteTextColor":"#20242b","noteBorderColor":"#8a9a92","labelBoxBkgColor":"#eceae4","labelBoxBorderColor":"#34463f","labelTextColor":"#20242b","sequenceNumberColor":"#f7f6f3","activationBkgColor":"#eef1ee","activationBorderColor":"#8a9a92"}}}%%
 flowchart TB
-  subgraph BASE["能力底座 · 共同状态与业务规则"]
+  subgraph PROB["这三件事，各有一个对应功能"]
     direction LR
-    P["人物 · 关系<br/>来源与时效"]
-    A["授权 · 读取范围"]
-    V["事项 · 方案版本"]
-    D["表态 · 执行回执"]
+    P1["情况只讲一次<br/>存下来，按对象复用"]
+    P2["约事有版本<br/>谁点头记在哪个版本上"]
+    P3["换页面不重填<br/>条件跟事项走"]
   end
-  subgraph FORM["当前交付的三种界面"]
+  subgraph SYS["一个助手，三种界面"]
     direction LR
-    W["手机优先 Web"]
-    APPS["小应用 · API · 连接器"]
-    EXT["桌面 Chrome 插件"]
+    W["手机 Web<br/>对话交办 · 资料库 · 事项跟进"]
+    APPS["小应用 · API · 连接器<br/>学习 / 周末 / 送礼 + 接入自己的应用"]
+    EXT["Chrome 插件<br/>在电脑上代填，回执回同一件事"]
+    BASE["同一份后端状态<br/>人物关系 · 授权范围 · 事项版本 · 执行回执"]
   end
-  W --> P
-  APPS --> A
-  EXT --> D
-  W --> V
-  APPS --> V
-  EXT --> V
+  P1 --> W
+  P2 --> W
+  P3 --> EXT
+  W --> BASE
+  APPS --> BASE
+  EXT --> BASE
 ```
 
-Web 是当前的演示载体。同一份后端状态还能接系统级个人助理，或者开放给第三方应用与 Agent 调用。
+三种界面共用同一份后端状态，所以在一个地方改的条件，另一个地方接着用。Web 是当前的演示载体；同一份后端状态还能接系统级个人助理，或者开放给第三方应用与 Agent 调用。
 
 | 界面 | 做什么 | 现在到哪一步 |
 |---|---|---|
@@ -181,7 +181,7 @@ python start_server.py 8000
   - 「识别图里的文字，进正文框」：只有点这一下，图才送去做识别。文字加在原正文后面，中间换行，你已经写的字不动。
   - 「只把图存进资料库，不识别」：点这一下不调模型，图只作为配图跟着记录存。
   - 「先裁剪再识别」（次级）：只有框住的那块送识别，取消裁剪就不调。整张图在离开设备之前不会先送出去。
-- **语音输入**：用浏览器自带的语音识别，不送服务端。本机 `http://localhost:8000` 打开可用；手机连局域网 IP（`http://192.168.x.x:8000`）打开时，浏览器不给非安全源这个能力，按钮会停用并说明原因。这时可以打字，或用输入法的语音转文字说完粘贴进来。
+- **语音输入**有两条路。服务端转写调 `/api/voice/transcribe`，走 Step 的 audio chat 模型，配 `PA_ASR_API_KEY` 即可用。浏览器识别用自带的 SpeechRecognition，要求安全上下文：本机 `http://localhost:8000` 可用，手机连局域网 IP 打开时浏览器不给这个能力。两条都不可用时按钮停用并说明原因。
 - 核对错字、对象和发生日期之后再保存，再打开记录看看正文、来源和配图对不对。
 - 识别失败会说原因，图和你的正文都留着，可以改、可以重试、可以放着以后再来。模型返回空白不算识别成功。取消草稿不会多出一条记录。
 
@@ -229,7 +229,7 @@ python -m http.server 9000 --bind 127.0.0.1 \
 
 没跑的：
 
-- 服务端语音转写不可用，依据见下面。改用浏览器自带识别，或者输入法语音转文字后粘贴；后者不算内置语音识别做完了。
+- 服务端语音转写已通：用 macOS say 合成的真实中文语音验过，转写内容与音频一致，结果不带情绪标签。不设 `PA_ASR_API_KEY` 时接口如实返回不可用与原因，不返回冒充成功的文字。
 - 完整 22 项模型测试没有复跑。另一台电脑的干净安装也没验。
 
 历史基线和以前的失败记录见[验收记录](<docs/acceptance-record.md>)。
@@ -240,7 +240,7 @@ python -m http.server 9000 --bind 127.0.0.1 \
 
 ## 语音与其他边界
 
-服务端语音转写不可用。`step/stepaudio-2.5-asr` 返回 404 `model_invalid`；`/v1/audio/transcriptions` 端点不存在；音频 chat 模型收到音频不当转写处理。明细见[语音核查摘要](<docs/delivery/verification-summary.md>)。
+服务端语音转写直连 Step，不经本地代理。本地代理只放行 `image_url` 一种 content part，音频 part 在入站解析时就被丢掉，路由表里也没有 `/v1/audio/*`。实测可用的组合是 `stepaudio-2.5-chat` 加 `input_audio`，模型 ID 不带 `step/` 前缀；带前缀返回 `model_invalid`，那个前缀是代理自己加的命名空间。明细见[语音核查摘要](<docs/delivery/verification-summary.md>)。
 
 「说一段」走浏览器自带的 SpeechRecognition，不经过本作品服务端。它受设备、权限和**安全上下文**三重限制：用 `http://localhost` 或 `https://` 打开时可用；用局域网 IP 的 `http://` 打开时不可用，这时界面会提前把按钮停用并写清原因和替代办法，不等用户点了才失败。按住期间持续识别，中间换气停顿不会中断；松手才停。自动化只验了接线通不通，真麦克风还没实测。
 

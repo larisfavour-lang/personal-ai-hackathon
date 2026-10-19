@@ -3039,9 +3039,11 @@ $("btn-photo").addEventListener("click", () => {
    3. 图片给两条路——读出文字、或只作配图；识别结果照样可改；
    4. 主体、日期都在草稿里改，有内容之后再补也不迟。
 
-   语音先说实话：当前模型接口没有可用的中文转写（见 /api/voice/transcribe
-   的实测记录）。所以语音按钮点下去只说明现状、给出能用的替代，
-   不假装转写，也不把一段录音说成已转写的文字。 */
+   语音有两条路，先说清各自的条件：
+   ① 服务端转写：调 /api/voice/transcribe，走 Step 的 audio chat 模型。
+      配了 PA_ASR_API_KEY 就能用，失败时接口如实返回原因。
+   ② 浏览器识别：用 SpeechRecognition，要求安全上下文（localhost 或 https）。
+   两条都不可用时，按钮提前停用并说明原因，不出现「看着能点、一按就失败」。 */
 function noteDraft(){
   return {
     // 正文。可能来自本人打字、语音转写、或图片识别，三者的来源分开记，

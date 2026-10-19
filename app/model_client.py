@@ -22,6 +22,70 @@ DEFAULT_MODEL = "step/step-5-preview"
 
 ALLOWED_DECISIONS = {"accept", "reject", "counter", "ask_clarify"}
 
+# 语音转写。走 Step 的 audio chat 模型：本地代理 opencodex 只放行 image_url 一种
+# content part，音频 part 在入站解析时就被丢掉，所以转写必须直连 Step。
+# 实测可用组合（2026-10-19）：model=stepaudio-2.5-chat，audio 用 input_audio/wav。
+# 注意两点：
+#   ① 模型 ID 不带 step/ 前缀。列表里就是 stepaudio-2.5-chat；带前缀会返回
+#      model_invalid——那个前缀是 opencodex 自己加的命名空间，不是 Step 的。
+#   ② 提示词必须明确禁止添加描述和语气标签，否则它会在转写前面缀一段
+#      「（温柔亲切，带着一丝阳光般的暖意）」之类的情绪说明。
+DEFAULT_ASR_BASE_URL = "https://api.stepfun.com/step_plan/v1"
+DEFAULT_ASR_MODEL = "stepaudio-2.5-chat"
+ASR_PROMPT = ("把这段音频里的话原样写成文字。不要加任何描述、标签、语气说明或解释，"
+              "只输出说的内容本身。")
+
+
+def transcribe_audio(audio_b64, media_type="audio/webm", timeout=120):
+    """把 base64 音频转成文字。返回 (ok, text, reason)。
+
+    失败时 ok=False 并给出可读原因，由上层决定怎么显示——不返回空字符串冒充成功，
+    也不把一段静态录音说成已转写。
+    """
+    import base64
+    import urllib.error
+    import urllib.request
+
+    base = (os.environ.get("PA_ASR_BASE_URL") or DEFAULT_ASR_BASE_URL).rstrip("/")
+    model = os.environ.get("PA_ASR_MODEL") or DEFAULT_ASR_MODEL
+    key = os.environ.get("PA_ASR_API_KEY") or os.environ.get("PA_MODEL_API_KEY") or ""
+    fmt = {"audio/webm": "webm", "audio/mp4": "mp4", "audio/mpeg": "mp3",
+           "audio/wav": "wav", "audio/ogg": "ogg"}.get(media_type, "webm")
+    try:
+        base64.b64decode(audio_b64, validate=True)
+    except Exception:
+        return False, "", "音频数据不是有效的 base64"
+    payload = {"model": model, "messages": [{"role": "user", "content": [
+        {"type": "text", "text": ASR_PROMPT},
+        {"type": "input_audio", "input_audio": {"data": audio_b64, "format": fmt}},
+    ]}]}
+    req = urllib.request.Request(
+        base + "/chat/completions", data=json.dumps(payload).encode("utf-8"),
+        method="POST")
+    req.add_header("Content-Type", "application/json")
+    if key:
+        req.add_header("Authorization", "Bearer " + key)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            body = json.loads(r.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        detail = ""
+        try:
+            detail = str(json.loads(e.read().decode("utf-8")).get("error", {}).get("message", ""))
+        except Exception:
+            pass
+        if e.code in (401, 403):
+            return False, "", "转写服务拒绝了密钥（%s）" % (detail or e.code)
+        if e.code == 404:
+            return False, "", "转写模型或接口不可用（%s）" % (detail or e.code)
+        return False, "", "转写服务返回 %s（%s）" % (e.code, detail)
+    except Exception as e:
+        return False, "", "转写服务没连上（%s）" % type(e).__name__
+    text = str((body.get("choices") or [{}])[0].get("message", {}).get("content") or "").strip()
+    if not text:
+        return False, "", "转写结果是空的"
+    return True, text, ""
+
 
 class ModelUnavailable(RuntimeError):
     pass
