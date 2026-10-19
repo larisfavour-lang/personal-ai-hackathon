@@ -745,7 +745,11 @@ async function renderConnectors(){
 const GIFT_RELATIONSHIPS = ["长辈", "晚辈", "同龄人", "朋友", "同事"];
 /* 学习进度的常见维度。一个孩子可以同时在很多条线上往前走，按人分只是第一层；
    按维度看才知道哪条线在推进、哪条线很久没碰。 */
-const STUDY_DIMS = ["数学", "语文", "英语", "阅读", "练琴", "运动", "绘画", "其它"];
+/* 学习维度按「这件事是在哪完成的」分，不按学科分。
+   主要跟踪线上能自己完成的部分：网课、在线考试、英语单词；
+   线下的期中期末各科成绩和课程表也录得进来，只是不自动来，靠拍图或手输。 */
+const STUDY_DIMS = ["网课", "在线考试", "英语单词", "阅读", "练琴", "运动",
+                    "绘画", "期中期末成绩", "课程表", "其它"];
 const STUDY_DIM_LABEL = {};
 const GIFT_CATS = [["preference", "偏好"], ["size", "尺寸"], ["avoid", "忌讳"], ["last_gift", "上次送过什么"]];
 const GIFT_CAT_LABEL = {preference: "偏好", size: "尺寸", avoid: "忌讳", last_gift: "上次送过什么"};
