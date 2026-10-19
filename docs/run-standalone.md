@@ -94,6 +94,9 @@ python -m http.server 9000 --bind 127.0.0.1 \
 
 普通运行只安装 [requirements.txt](<../requirements.txt>) 中的应用依赖。当前源码候选保留核心运行、必要模拟商店与契约 fixture、两个 Node 本地单元，以及限定参与、资料关联、客户端重试、连接器接入、送礼档案、朋友旅行、关系分类与家庭缺口八个测试；不包含全部历史浏览器、探针、拍摄和录制辅助脚本。原件留工程原位，不因排除而删除。最终包内文件以交付清单和逐文件 SHA-256 为准。
 
+工程里还有一些历史验证脚本硬编码 8000 端口、写固定临时文件、或者直接动运行库，
+别在日常实例上批量跑；先读脚本再在独立进程里运行。
+
 保留的后端接口测试额外需要 httpx，Node 单元需要 Node.js；图标重生成需要 Pillow。更广的历史浏览器验证还需要 websockets、Chrome，录像可需 FFmpeg；这些外部二进制、字体及虚拟环境不随源码分发，未验的 FFmpeg 构建不冒称已完成许可证核查。Python 依赖为版本范围，另一台电脑的干净安装、Windows、外部 Chrome 路径仍未验。
 
 [客户端重试单元](<../tests/test_model_client_retry.py>)只用 mock 响应，不连接模型；[限定参与接口](<../tests/test_plan_participation_api.py>)与[资料关联测试](<../tests/test_note_plan_link.py>)在导入应用前自行指定独立 PA_DATA_DIR，并用 stub。先读脚本，在独立进程运行；以下是包内安全子集的调用示例，不代替另一台电脑的实跑验收：
