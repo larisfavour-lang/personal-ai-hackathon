@@ -85,7 +85,7 @@ label{display:block;font-size:12.5px;color:var(--ink-3);margin:10px 0 4px}
 .sources h4{margin:0 0 6px;font-size:13px;font-weight:600;color:var(--ink-2)}
 .sources .s{font-size:12.5px;color:var(--ink-2);margin-bottom:3px}
 .big{font-size:14.5px;margin:6px 0 0}
-input,textarea,select{max-width:100%;min-width:0}.mapping-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.consent{display:inline-flex;align-items:center;gap:6px;margin-right:12px}.notice{overflow-wrap:anywhere}details summary{cursor:pointer}.btn{min-height:44px} @media(max-width:400px){.mapping-grid{grid-template-columns:1fr}}
+input,textarea,select{max-width:100%;min-width:0}.mapping-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.consent{display:inline-flex;align-items:center;gap:6px;margin-right:12px}.notice{overflow-wrap:anywhere}details summary{cursor:pointer}.btn{min-height:44px}.sim-list{display:flex;flex-direction:column;gap:8px}.sim-row{display:grid;grid-template-columns:1fr auto;grid-template-areas:'head btn' 'desc desc';gap:2px 10px;align-items:center}.sim-head{grid-area:head;min-width:0}.sim-desc{grid-area:desc;font-size:12px}.sim-row .btn{grid-area:btn;min-height:38px;padding:0 14px}.sim-row .btn{min-height:40px;flex:0 0 auto} @media(max-width:400px){.mapping-grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -118,6 +118,18 @@ input,textarea,select{max-width:100%;min-width:0}.mapping-grid{display:grid;grid
 
 <script>
 const $ = (id) => document.getElementById(id);
+
+/* 按钮执行包装：禁用→执行→失败给可见原因→恢复。
+   原来是 renderConnectors / renderGift 各自定义的局部函数，renderRelClass
+   直接调用却漏了定义，一进那个视图就抛 ReferenceError，onclick 赋值被跳过，
+   「保存分类」看起来能点、实际什么都没发生。提到模块作用域，只留一份。 */
+async function action(button, fn){
+  if(!button) return;
+  button.disabled = true;
+  try{ await fn(); }
+  catch(e){ flash('没有完成：' + (e && e.message ? e.message : e), true); }
+  finally{ if(button.isConnected) button.disabled = false; }
+}
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
   ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 let view = "study";
@@ -217,6 +229,12 @@ function personChipsFor(list){
   }
   h += '</div>';
   return h;
+}
+
+/* 由 person_id 取显示名；取不到就退回 id，不显示空白。 */
+function personName(pid){
+  const p = (myPersons || []).find(x => x.person_id === pid);
+  return p ? p.name : String(pid || "").slice(0, 8);
 }
 
 function personChips(){
@@ -570,7 +588,17 @@ async function renderPlan(){
   h += '<div class="card"><h3>下一步建议</h3>'
     + '<div class="meta">只依据已授权给你的近况，不重填人物背景。</div>'
     + personChips()
-    + '<div class="row"><button class="btn" id="btn-ask">给一条建议</button></div>'
+    // 选中谁要说出来：原先点了人名只有 chip 自己高亮，页面上别处一点变化都没有，
+    // 用户无从判断这个选择影响了什么。这里把当前范围写成一行可见文字，
+    // 「给一条建议」按钮上也带上，点的结果和选的人对得上。
+    + '<div class="meta" id="pick-scope" style="margin-top:6px">'
+    + (picked ? '正在看：' + esc(personName(picked))
+              + '，下面的建议只按他的近况给。'
+              : '正在看全部人，下面的建议按每个人的近况分别给。')
+    + '</div>'
+    + '<div class="row"><button class="btn" id="btn-ask">'
+    + (picked ? '给' + esc(personName(picked)) + '一条建议' : '给一条建议')
+    + '</button></div>'
     + '<div id="plan-result"></div></div>';
   out.innerHTML = h;
   out.querySelectorAll('[data-open-plan]').forEach((b) => {
@@ -648,18 +676,27 @@ async function renderConnectors(){
     const saved=connectorDraft||{name:'我的学习应用',base_url:d.demo_base_url,path:d.demo_path,field_map:{progress:'进度',completed:'已完成项目',date:'发生日期',subject:'对象'}};
     let h='<div class="notice">接入的数据先存入本人资料库。用于建议前，需逐条、逐字段单独授权；更正后重新授权，撤回后保留历史但不再作为依据。</div>';
     h+='<div class="card"><h3>自己开发的应用</h3><p class="meta">真实 HTTP 请求。接口由你提供并负责可达性；下面预填的是内置本地演示服务，不是你的真实应用。最多读取 100 条、512 KiB，只接收 JSON。</p>';
+    h+='<details class="notice"><summary>接入前需要知道的几件事</summary>'
+      +'<p class="meta">接口由你提供并负责可达性；下面预填的是内置本地演示服务，不是你的真实应用。最多读取 100 条、512 KiB，只接收 JSON。外部记录须有稳定 id；对象填本人已有姓名或 person_id，发生日期须为 YYYY-MM-DD。本演示不接收凭证，不明文保存或回显 token；私网与重定向被拒，回环地址仅供本地演示。</p></details>';
     h+='<label for="connector-name">应用名称</label><input type="text" id="connector-name" value="'+esc(saved.name)+'">';
     h+='<label for="connector-base">接口地址（base_url）</label><input type="text" id="connector-base" value="'+esc(saved.base_url)+'">';
     h+='<label for="connector-path">路径</label><input type="text" id="connector-path" value="'+esc(saved.path)+'">';
-    h+='<p class="meta">字段映射：填写外部 JSON 顶层键名。外部记录另须有稳定 id；对象填本人已有姓名或 person_id，发生日期须为 YYYY-MM-DD。</p><div class="mapping-grid">';
+    h+='<div class="mapping-grid">';
     for(const local of ['进度','已完成项目','发生日期','对象']){
       const external=Object.keys(saved.field_map).find(k=>saved.field_map[k]===local)||'';
       h+='<label>'+esc(local)+' ← 外部键<input type="text" data-map="'+local+'" value="'+esc(external)+'"></label>';
     }
-    h+='</div><p class="meta">本演示不接收凭证，不明文保存或回显 token。仅支持无需凭证的演示接口；私网与重定向被拒，回环地址仅供本地演示。</p><div class="row"><button class="btn" id="connector-test">试运行</button><button class="btn primary" id="connector-confirm" disabled>确认接入并导入</button></div><div id="connector-preview"></div></div>';
-    h+='<div class="card"><h3>三方开放 API · 模拟数据</h3><p class="meta">以下全部为服务端固定模拟数据，不连接真实学校或外部三方 API。</p>';
-    for(const c of d.catalog){h+='<section class="notice"><strong>'+esc(c.name)+'</strong> <span class="pill">模拟数据</span><p>'+esc(c.description)+'</p><button class="btn" data-sim="'+esc(c.key)+'">连接并同步模拟数据</button></section>';}
-    h+='</div><div class="card"><h3>我的连接器</h3>';
+    h+='</div><div class="row"><button class="btn" id="connector-test">试运行</button><button class="btn primary" id="connector-confirm" disabled>确认接入并导入</button></div><div id="connector-preview"></div></div>';
+    /* 三方目录改成紧凑列表：原来每个源一个完整 section，四个源把页面撑到
+       一千五百多像素，用户要滚很久才看到自己的连接器；四个按钮文案还完全一样，
+       分不出哪个是哪个。现在一行一个源，按钮带上源名。 */
+    h+='<div class="card"><h3>三方开放 API · 模拟数据</h3><p class="meta">以下全部为服务端固定模拟数据，不连接真实学校或外部三方 API。</p><div class="sim-list">';
+    for(const c of d.catalog){
+      h+='<div class="sim-row"><div class="sim-head"><strong>'+esc(c.name)+'</strong></div>'
+        +'<div class="meta sim-desc">'+esc(c.description)+'</div>'
+        +'<button class="btn" data-sim="'+esc(c.key)+'">连接</button></div>';
+    }
+    h+='</div></div><div class="card"><h3>我的连接器</h3>';
     if(!d.connectors.length)h+='<p class="empty">还没有连接器，先试运行看看。</p>';
     for(const c of d.connectors){
       h+='<section class="notice"><strong>'+esc(c.name)+'</strong><div class="meta">'+(c.kind==='self_app'?'自建应用 · 真实 HTTP':'三方开放 API · 模拟数据')+' · '+(c.revoked?'已撤回':connectorStatus[c.status]||c.status)+'<br>最近同步：'+esc(c.last_sync_at||'尚未同步')+' · 已导入 '+esc(c.imported_count)+' 条</div>';
@@ -678,7 +715,6 @@ async function renderConnectors(){
       h+='</section>';
     }
     out.innerHTML=h+'</div>';
-    async function action(button,fn){button.disabled=true;try{await fn();}catch(e){flash('没有完成：'+e.message,true);}finally{if(button.isConnected)button.disabled=false;}}
     $('connector-test').onclick=()=>action($('connector-test'),async()=>{
       const field_map={};for(const el of out.querySelectorAll('[data-map]')){const key=el.value.trim();if(key){if(field_map[key])throw new Error('一个外部键不能映射到多个本地字段');field_map[key]=el.dataset.map;}}
       connectorDraft={kind:'self_app',name:$('connector-name').value.trim(),base_url:$('connector-base').value.trim(),path:$('connector-path').value.trim(),field_map};
@@ -765,8 +801,6 @@ async function renderGift(){
   }
   if(!any) h += '<p class="empty">送礼管家还是空的，先在上面加入一个人。</p>';
   out.innerHTML = h;
-  async function action(button, fn){ button.disabled = true; try{ await fn(); }
-    catch(e){ flash('没有完成：' + e.message, true); } finally{ if(button.isConnected) button.disabled = false; } }
   $('gift-create').onclick = () => action($('gift-create'), async() => {
     const name = $('gift-new-name').value.trim();
     const rel = $('gift-new-rel').value;

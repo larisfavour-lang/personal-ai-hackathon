@@ -2813,6 +2813,31 @@ REUSABLE_STAGES = ("created", "negotiating", "agreed", "counter_pending",
                    "blocked", "needs_renegotiation")
 
 
+def _merge_followup(prev, new):
+    """把跟进句抽出的条件并进原有事项，不覆盖已有主体，也不erase既有值。
+
+    合并规则：新值非空才覆盖；原句、原主体、原 occasion 一律保留——
+    跟进句本来就抽不出这些，覆盖只会把事项改坏。candidates 只在双方都没有时保留。
+    """
+    out = dict(prev or {})
+    for k in ("category", "budget_max", "avoid_repeat", "hard_constraints",
+              "subject_hint", "subject_name", "subject_id",
+              "subject_resolved_name", "occasion"):
+        v = (new or {}).get(k)
+        if v in (None, "", [], False) and k not in ("avoid_repeat",):
+            continue
+        if k == "avoid_repeat" and not v:
+            continue
+        if out.get(k) in (None, "", [], False):
+            out[k] = v
+    # 主体仍然不明时，候选还是要能给出来
+    if out.get("ambiguous_subject") and not out.get("candidates"):
+        out["candidates"] = (new or {}).get("candidates") or []
+    out["ambiguous_subject"] = bool(out.get("ambiguous_subject")) and not out.get("subject_id")
+    out["note"] = (new or {}).get("note") or out.get("note") or ""
+    return out
+
+
 def create_task(db, client, owner_id, utterance):
     # 同一句原话重复交办时，接着原来那件没办完的事办，不再开一件重复的。
     # 用户重打一遍往往是没看到回应，不是想办两件一样的事；已经办完或明确失败的
@@ -2833,6 +2858,32 @@ def create_task(db, client, owner_id, utterance):
                 extracted = {}
             return {"task_id": dup["task_id"], "extracted": extracted, "reused": True}
     extracted = agents._extract_requirements(db, client, utterance, owner_id)
+    # 跟进句接着原来那件办，不新开孤儿事项。
+    # 「300 以内」「要软底的」这类话抽得出预算和条件，抽不出收礼人；
+    # 原先只按原话一字不差复用，于是每次跟进都新建一条没有主体的事项，
+    # 预算孤零零挂在那件上，原来那件的预算还是空的。
+    # 判据三条同时成立才并：抽不出主体、只有一件未完结事项、那句话本身不是新交办
+    # （新交办会说「再买一双」这类，extracted 里会带上新的 subject 或 occasion）。
+    if extracted.get("ambiguous_subject") and not extracted.get("occasion"):
+        open_rows = db.rows(
+            "SELECT task_id, extracted_json FROM task WHERE owner_id=?"
+            " AND stage IN ('created','negotiating','agreed','counter_pending',"
+            "'blocked','needs_renegotiation')"
+            " ORDER BY created_at DESC", (owner_id,))
+        if len(open_rows) == 1:
+            prev_task, prev_raw = open_rows[0]["task_id"], open_rows[0]["extracted_json"]
+            try:
+                prev = json.loads(prev_raw or "{}")
+            except (ValueError, TypeError):
+                prev = {}
+            merged = _merge_followup(prev, extracted)
+            db.execute("UPDATE task SET extracted_json=? WHERE task_id=?",
+                       (json.dumps(merged, ensure_ascii=False), prev_task))
+            db.audit(prev_task, owner_id, "task_followup_merged",
+                     {"utterance": utterance, "merged_keys": sorted(
+                         k for k in merged if merged.get(k) != prev.get(k))},
+                     owner_id=owner_id)
+            return {"task_id": prev_task, "extracted": merged, "reused": True}
     task_id = dbm.new_id("task")
     db.execute(
         "INSERT INTO task(task_id, owner_id, utterance, extracted_json, stage, outcome, created_at)"
