@@ -1284,6 +1284,18 @@ PLAN_SCENARIOS = {
         "percap_key": "人均预算",
         "family_flavored": False,
     },
+    "gift_party": {
+        "label": "凑份子送礼",
+        "condition_keys": ("收礼人", "场合", "共凑总预算", "本人出资上限",
+                           "谁去买", "什么时候送", "备注"),
+        "plan_driving_keys": ("收礼人", "场合", "共凑总预算", "谁去买", "什么时候送"),
+        "self_only_keys": ("本人出资上限",),
+        "context_keys": ("备注",),
+        "own_cap_key": "本人出资上限",
+        "total_budget_key": "共凑总预算",
+        "percap_key": None,
+        "family_flavored": False,
+    },
 }
 # 家庭场景的键与口径说明单独留名：既有界面/模型/测试照旧引用，行为不变。
 PLAN_CONDITION_KEYS = PLAN_SCENARIOS["group_activity"]["condition_keys"]
@@ -2521,6 +2533,10 @@ def classify_intent(db, client, owner_id, utterance):
     # 但不会同时说「几家 + 一起做什么」。
     if group_activity_intent(text):
         return "group_activity"
+    # 几个人一起凑份子送礼：也是多方协商，条件字段用凑份子送礼那套。
+    # 放在 group_activity 之后：多家庭句不会被它抢走。
+    if gift_party_intent(text):
+        return "gift_party"
     # 约朋友一起旅行：复用同一套多方协调引擎，条件字段用朋友旅行那套
     # （目的地、假期长度、人均预算……），不是家庭活动那套。原先这个函数
     # 定义了却没接进分派，主对话里说「约朋友去大理」只会落进家庭活动或送礼，
@@ -2549,7 +2565,10 @@ def classify_intent(db, client, owner_id, utterance):
         "          带孩子出去玩」「两家人聚个餐」。这不是给某一个人准备礼物，\n"
         "          不要选成一个送礼对象；各家自己给条件。\n"        "  friend_trip: 用户在约朋友一起旅行或出游，例如「五一约朋友去云南」\n"
         "          「想和闺蜜去大理几天」。这不是多家庭活动，也不是送礼；\n"
-        "          各人自己给条件，随行说不说由本人定。\n"
+        "          各人自己给条件，随行说不说由本人定。\n"        "  gift_party: 几个人一起给同一个人凑份子送礼，例如「妈妈生日快到了，\n"
+        "          大家一起商量送什么」「想和妹妹合买个包送她」。这不是我一个人\n"
+        "          去买，是多个人各自报条件；收礼人、场合、共凑总预算、谁去买\n"
+        "          都由参与方分别说。\n"
         "判断要点：用户是在要求你去办事、给你信息、问进展、问缺什么，\n"
         "还是在说一件已经办完的事后来怎么样了？\n"
         "给办事提条件（例如「300元以内」「别和上次重复」）仍然算 task。\n"
@@ -2571,8 +2590,8 @@ def classify_intent(db, client, owner_id, utterance):
     # 模型明明判对了「多家庭活动」，到这里也会被退回成 task，
     # 于是一句「周末三家一起带孩子出去玩」被当成送礼交办去协商。
     return intent if intent in ("task", "record", "status", "clarify", "followup",
-                               "family_update", "group_activity",
-                               "friend_trip") else "task"
+                               "family_update", "group_activity", "friend_trip",
+                               "gift_party") else "task"
 
 
 def _pending_clarify(db, owner_id):
@@ -6832,6 +6851,30 @@ FAMILY_TRIP_MARKERS = ("几家", "多少个家庭", "多少户", "家庭", "带�
 GIFTING_MARKERS = ("礼物", "送礼", "买给", "生日礼", "买什么", "回礼", "还礼")
 
 
+GIFT_PARTY_MARKERS = ("凑份子", "合送", "合买", "一起送", "一起买", "一起凑",
+                      "一起商量", "一起定", "大家一起", "共同出", "商量送",
+                      "讨论送", "一起送什么")
+
+
+def gift_party_intent(text):
+    """这句话是几个人一起给同一个人凑份子送礼，不是我一个人去买。
+
+    和送礼交办的分工：「给妈妈买双鞋」是我一个人的事，走送礼链；
+    「妈妈生日快到了，大家一起商量送什么」是多人的事，走协商链，
+    各家自己报出资上限、谁去买、什么时候送。
+
+    判据只看有没有**共同行动**的措辞，不看提到了几个人。
+    「给三家一起出游的孩子们准备礼物」里出现了「一起」，但做事的是我一个人，
+    那是送礼交办，不是凑份子——所以「一起」单独不算，必须是「一起送」
+    「合买」「凑份子」这类把动作指向多人的说法。家庭活动和朋友旅行排在
+    前面判断，它们的句子不会被这里抢走。
+    """
+    t = (text or "").strip()
+    if not t:
+        return False
+    return any(m in t for m in GIFT_PARTY_MARKERS)
+
+
 def start_friend_trip(db, client, owner_id, utterance):
     """从一句话直接开一场朋友旅行草稿，复用多方协调引擎。
 
@@ -6877,6 +6920,51 @@ def start_friend_trip(db, client, owner_id, utterance):
            if cap else "")
         + "想说自己这边几个人、随行是谁，在参与页声明；没说就只记你这一方。"
         + "带伴侣、不带伴侣都行，由各人自己讲。"
+    )
+    return {"plan_id": plan_id, "reused": reused, "title": title,
+            "own_cap": cap, "reply": reply, "companions": []}
+
+
+def start_gift_party(db, client, owner_id, utterance):
+    """从一句话直接开一场凑份子送礼，复用多方协调引擎。
+
+    和送礼交办的分工：那一个是我一个人去买，走送礼链；这一个是几个人一起
+    给同一个人凑份子，走协商链，条件字段用凑份子送礼那套（收礼人、场合、
+    共凑总预算、本人出资上限、谁去买、什么时候送）。两家共用的规则一条不减：
+    各家只补自己的条件、代表审阅不算本人接受、同一版本才计数、条件变了旧接受
+    失效、未授权数据不进提示词。
+
+    不替别人决定的事：谁去买、各出多少，都由参与方分别说；收礼人说不清就
+    留着问，不猜。
+    """
+    text = (utterance or "").strip()
+    title = text[:120] or "凑份子送礼"
+    reused = find_open_plan(db, owner_id, title) is not None
+    plan_id = create_plan(db, owner_id, title, text, kind="gift_party")
+    cap = extract_own_cap(text)
+    conditions = {}
+    if cap:
+        conditions["本人出资上限"] = cap
+    mine = db.row("SELECT participant_id FROM plan_participant"
+                  " WHERE plan_id=? AND owner_id=?", (plan_id, owner_id))
+    if mine is None:
+        add_plan_participant(db, plan_id, owner_id, "我家", conditions, True,
+                             role="self")
+    elif cap:
+        cur = db.row("SELECT conditions_json FROM plan_participant"
+                     " WHERE plan_id=? AND owner_id=?", (plan_id, owner_id))
+        have = json.loads(cur["conditions_json"] or "{}")
+        if "本人出资上限" not in have:
+            have["本人出资上限"] = cap
+            db.execute("UPDATE plan_participant SET conditions_json=? WHERE plan_id=?"
+                       " AND owner_id=?",
+                       (json.dumps(have, ensure_ascii=False), plan_id, owner_id))
+    reply = (
+        "这件事按凑份子送礼记下了。各人自己报：收礼人是谁、什么场合、"
+        "一共凑多少、自己出多少、谁去买、什么时候送。"
+        + ("你说的「%s」记在**本人出资上限**里，不是大家一起凑的总数。" % cap
+           if cap else "")
+        + "没说的一句都不替你定。"
     )
     return {"plan_id": plan_id, "reused": reused, "title": title,
             "own_cap": cap, "reply": reply, "companions": []}

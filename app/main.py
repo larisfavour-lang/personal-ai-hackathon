@@ -1283,6 +1283,16 @@ def api_say(body: UtteranceBody, request: Request):
                     "reused": started["reused"], "title": started["title"],
                     "own_cap": started["own_cap"],
                     "companions": started.get("companions", [])}
+        if intent == "gift_party":
+            # 几个人一起凑份子送礼：多方协商，条件字段用凑份子送礼那套。
+            # 原先进不来这条——「妈妈生日快到了，大家一起商量送什么」
+            # 会被当成我一个人的送礼交办，接着被要求选一个送礼对象。
+            started = service.start_gift_party(db, client, owner_id, body.utterance)
+            return {"intent": intent, "kind": "gift_party",
+                    "reply": started["reply"], "plan_id": started["plan_id"],
+                    "reused": started["reused"], "title": started["title"],
+                    "own_cap": started["own_cap"],
+                    "companions": started.get("companions", [])}
         task = service.create_task(db, client, owner_id, body.utterance)
         return {"intent": intent, "kind": "task", "task_id": task["task_id"],
                 "extracted": task["extracted"], "reused": bool(task.get("reused"))}
