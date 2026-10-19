@@ -60,9 +60,9 @@ flowchart TB
 
 小应用、数据接入、连接器都是网页里的页面，是同一些记录在不同事情上的用法。
 
-## 核心：多方协商
+## 几个人约一件事时，助理管什么
 
-约一件事的难处不在没有人答应，而在答应之后又改了，先前那次同意是否还有效无从查证。这里把每次约定拆开记录：每一版都有编号，谁同意了哪一版分别记下；条件变更后，旧的一版立即失效，各方对新的一版重新表态。
+群里能说清的就群里说。助理在这件事上只做两样：把各家说的关键条件记住，别让口径对不上；按当前条件给一版方案建议，谁同意谁没同意记在哪儿。难处不在没有人答应，而在答应之后又改了，先前那次同意是否还有效无从查证——所以每一版都有编号，谁同意了哪一版分别记下；条件变更后，旧的一版立即失效。
 
 ```mermaid
 %%{init: {"theme":"base","themeVariables":{"background":"#f7f6f3","mainBkg":"#eceae4","primaryColor":"#eceae4","primaryTextColor":"#20242b","primaryBorderColor":"#34463f","secondaryColor":"#eef1ee","secondaryBorderColor":"#8a9a92","tertiaryColor":"#f7f6f3","tertiaryBorderColor":"#d9d6cf","lineColor":"#5b6068","textColor":"#20242b","fontFamily":"PingFang SC, Microsoft YaHei, sans-serif","fontSize":"15px","clusterBkg":"#f7f6f3","clusterBorder":"#d9d6cf","edgeLabelBackground":"#f7f6f3","nodeBorder":"#34463f","actorBkg":"#eceae4","actorBorder":"#34463f","actorTextColor":"#20242b","signalColor":"#5b6068","signalTextColor":"#20242b","noteBkgColor":"#eef1ee","noteTextColor":"#20242b","noteBorderColor":"#8a9a92","labelBoxBkgColor":"#eceae4","labelBoxBorderColor":"#34463f","labelTextColor":"#20242b","sequenceNumberColor":"#f7f6f3","activationBkgColor":"#eef1ee","activationBorderColor":"#8a9a92"}}}%%
@@ -72,18 +72,18 @@ sequenceDiagram
   participant A as 助理
   participant F as 另一家
   U->>A: 周末三家一起带孩子出去玩，我出100以内
-  A->>A: 记下这件事；100 是我家最多出多少
+  A->>A: 记下这件事；100 是我家最多出多少，不是活动总预算
   A->>U: 还差谁、缺什么（第三家不知道就留空）
   U->>A: 挑能给别家看的几项，逐条确认
-  A->>A: 按各家现在说的条件，排第一版
+  A->>A: 按各家现在说的条件，给一版建议
   U->>A: 改了其中一个条件
-  A->>A: 重新选字段、重新发布
+  A->>A: 按新条件重排一版
   U->>F: 发一条只能看一次的邀请链接
-  F->>A: 自称是谁，只填自己这边的条件和孩子名单
+  F->>A: 自称是谁，只填自己这边的条件
   U->>A: 认下这个自称的家庭
-  A->>A: 按所有家现在的条件，重排第二版
-  F->>A: 本人对第二版说同意或不同意
-  U->>A: 本人对第二版说同意或不同意
+  A->>A: 按所有家现在的条件，再排一版
+  F->>A: 本人对这一版说同意或不同意
+  U->>A: 本人对这一版说同意或不同意
   Note over A: 只有本人对眼前这一版点了头，才算约定<br/>助理替他看过的，只是建议
 ```
 
